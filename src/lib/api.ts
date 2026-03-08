@@ -513,7 +513,7 @@ export async function generatePracticalExamWithAPI  (
         }
         }
         }
-      },
+      };
   } catch (error: any) {
     console.error('Generate exam error:', error);
     

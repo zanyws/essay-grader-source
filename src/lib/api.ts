@@ -501,8 +501,8 @@ export async function generatePracticalExamWithAPI  (
         material1: { title: '', content: '' },
         material2: { title: '', content: '' },
       },
-      markingScheme: data.markingScheme || ?
-              markingScheme: {
+      markingScheme: data.markingScheme || {
+              content: {
         content: {
           infoPoints: data.markingScheme?.content?.infoPoints || [],
           developmentPoints: data.markingScheme?.content?.developmentPoints || []

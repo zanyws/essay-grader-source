@@ -438,7 +438,8 @@ export async function extractQuestionCriteriaWithAPI(
 }
 
 // 生成實用寫作模擬卷（新邏輯：上傳模擬卷→生成新模擬卷）
-export async function generatePracticalExamWithAPI(
+441
+  (
   fileContent: string,
   fileType: string,
   genre: string,
@@ -501,12 +502,17 @@ export async function generatePracticalExamWithAPI(
         material1: { title: '', content: '' },
         material2: { title: '', content: '' },
       },
-      markingScheme: data.markingScheme || {
-        content: { infoPoints: [], developmentPoints: [] },
-        organization: { formatRequirements: [], toneRequirements: [] },
+      markingScheme: data.markingScheme || ?
+              markingScheme: {
+        content: {
+          infoPoints: data.markingScheme?.content?.infoPoints || [],
+          developmentPoints: data.markingScheme?.content?.developmentPoints || []
+        },
+        organization: {
+          formatRequirements: data.markingScheme?.organization?.formatRequirements || [],
+          toneRequirements: data.markingScheme?.organization?.toneRequirements || []
+        }
       },
-      modelEssay: data.modelEssay || '',
-    };
   } catch (error: any) {
     console.error('Generate exam error:', error);
     

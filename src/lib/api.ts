@@ -511,6 +511,8 @@ export async function generatePracticalExamWithAPI  (
           formatRequirements: data.markingScheme?.organization?.formatRequirements || [],
           toneRequirements: data.markingScheme?.organization?.toneRequirements || []
         }
+        }
+        }
       },
   } catch (error: any) {
     console.error('Generate exam error:', error);

@@ -438,8 +438,7 @@ export async function extractQuestionCriteriaWithAPI(
 }
 
 // 生成實用寫作模擬卷（新邏輯：上傳模擬卷→生成新模擬卷）
-441
-  (
+export async function generatePracticalExamWithAPI  (
   fileContent: string,
   fileType: string,
   genre: string,

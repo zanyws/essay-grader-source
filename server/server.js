@@ -541,21 +541,30 @@ async function extractQuestionCriteriaWithGemini(apiKey, modelName, fileData, te
   const normalizedModelName = normalizeGeminiModelName(modelName);
   const model = `models/${normalizedModelName}`;
   
-  const prompt = `你是一個專業的香港DSE中文科教育文件分析助手。請從文件中分別提取以下四項內容。
+  const prompt = `你是一個專業的香港DSE中文科教育文件分析助手。請從文件中分別提取以下內容。
 
 文件可能是一份完整的實用寫作練習卷，包含題目、資料一、資料二和評分參考（評卷參考）。請仔細分析並分別提取：
 
 1. question（題目）：作文的題目要求，即「試以……名義，撰寫……」的完整題目句子
 2. materials（資料內容）：資料一和資料二的完整內容，包含標題和正文，保留原有格式
 3. criteria（評分準則）：評分參考或評卷參考的內容（如無則為空字符串）
+4. genre（文體）：根據題目判斷文體類型，只可返回以下其中一個英文值：
+   - "speech"（演講辭）：題目要求撰寫演講辭、發表演講
+   - "letter"（書信/公開信）：題目要求撰寫書信、公開信、自薦信
+   - "proposal"（建議書）：題目要求撰寫建議書
+   - "report"（報告）：題目要求撰寫報告、工作報告
+   - "commentary"（評論文章）：題目要求撰寫評論、文章
+   - "article"（專題文章）：題目要求撰寫專題文章、介紹文章
+   若無法判斷，返回空字符串 ""
 
-重要：所有內容必須使用繁體中文，完整保留原文，不可省略或改寫。
+重要：所有文字內容必須使用繁體中文，完整保留原文，不可省略或改寫。
 
 請只返回有效的JSON格式，不要加任何說明或markdown：
 {
   "question": "題目完整內容",
   "materials": "資料一和資料二的完整內容",
-  "criteria": "評分準則內容（如無則為空字符串）"
+  "criteria": "評分準則內容（如無則為空字符串）",
+  "genre": "speech/letter/proposal/report/commentary/article 其中之一，或空字符串"
 }`;
 
   let requestBody;
@@ -578,8 +587,8 @@ async function extractQuestionCriteriaWithGemini(apiKey, modelName, fileData, te
       }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 65536,
-        responseMimeType: 'application/json'
+        maxOutputTokens: 65536
+        // responseMimeType 已移除：避免觸發 Gemini 安全過濾
       },
       safetySettings: GEMINI_SAFETY_SETTINGS
     };
@@ -592,8 +601,8 @@ async function extractQuestionCriteriaWithGemini(apiKey, modelName, fileData, te
       }],
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 65536,
-        responseMimeType: 'application/json'
+        maxOutputTokens: 65536
+        // responseMimeType 已移除：避免觸發 Gemini 安全過濾
       },
       safetySettings: GEMINI_SAFETY_SETTINGS
     };
@@ -1178,21 +1187,26 @@ async function extractWithOpenAI(apiKey, modelName, fileData, text, fileType) {
 async function extractQuestionCriteriaWithOpenAI(apiKey, modelName, fileData, text, fileType) {
   const model = modelName || 'gpt-4o';
   
-  const systemPrompt = `你是一個專業的香港DSE中文科教育文件分析助手。請從文件中分別提取以下四項內容。
+  const systemPrompt = `你是一個專業的香港DSE中文科教育文件分析助手。請從文件中分別提取以下內容。
 
 文件可能是一份完整的實用寫作練習卷，包含題目、資料一、資料二和評分參考（評卷參考）。請仔細分析並分別提取：
 
 1. question（題目）：作文的題目要求，即「試以……名義，撰寫……」的完整題目句子
 2. materials（資料內容）：資料一和資料二的完整內容，包含標題和正文，保留原有格式
 3. criteria（評分準則）：評分參考或評卷參考的內容（如無則為空字符串）
+4. genre（文體）：根據題目判斷文體類型，只可返回以下其中一個英文值：
+   - "speech"（演講辭）："letter"（書信/公開信）："proposal"（建議書）
+   - "report"（報告）："commentary"（評論文章）："article"（專題文章）
+   若無法判斷，返回空字符串 ""
 
-重要：所有內容必須使用繁體中文，完整保留原文，不可省略或改寫。
+重要：所有文字內容必須使用繁體中文，完整保留原文，不可省略或改寫。
 
 請只返回有效的JSON格式，不要加任何說明或markdown：
 {
   "question": "題目完整內容",
   "materials": "資料一和資料二的完整內容",
-  "criteria": "評分準則內容（如無則為空字符串）"
+  "criteria": "評分準則內容（如無則為空字符串）",
+  "genre": "speech/letter/proposal/report/commentary/article 其中之一，或空字符串"
 }`;
 
   let messages;

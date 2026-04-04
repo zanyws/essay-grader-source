@@ -140,7 +140,7 @@ app.post('/api/extract-question-criteria', async (req, res) => {
 // 批改作文
 app.post('/api/grade', async (req, res) => {
   try {
-    const { apiKey, apiType, model, baseURL, essayText, question, customCriteria, gradingMode, contentPriority, enhancementDirection, genre, infoPoints, devItems, formatRequirements, materials } = req.body;
+    const { apiKey, apiType, model, baseURL, essayText, question, customCriteria, gradingMode, contentPriority, enhancementDirection, genre, infoPoints, devItems, formatRequirements, materials, regenerateFeedbackOnly, teacherGrading } = req.body;
     
     if (!apiKey) {
       return res.status(400).json({ success: false, message: 'API 密鑰不能為空' });
@@ -154,6 +154,20 @@ app.post('/api/grade', async (req, res) => {
     const truncatedText = essayText.length > maxLength 
       ? essayText.substring(0, maxLength) + '\n\n[文章過長，已截斷]' 
       : essayText;
+
+    // 【重新生成評語模式】：老師調整評分後，只重新生成評語，保留原有增潤文章和示範文章
+    if (regenerateFeedbackOnly && teacherGrading && gradingMode === 'secondary') {
+      let result;
+      if (apiType === 'gemini') {
+        result = await regenerateFeedbackWithGemini(apiKey, model, truncatedText, question, teacherGrading);
+      } else if (apiType === 'custom') {
+        if (!baseURL) return res.status(400).json({ success: false, message: '自定義 API 需要提供 API 基礎 URL' });
+        result = await regenerateFeedbackWithCustom(apiKey, baseURL, model, truncatedText, question, teacherGrading);
+      } else {
+        result = await regenerateFeedbackWithOpenAI(apiKey, model, truncatedText, question, teacherGrading);
+      }
+      return res.json({ success: true, ...result });
+    }
 
     let result;
     if (apiType === 'gemini') {
@@ -626,8 +640,8 @@ async function gradeWithGemini(apiKey, modelName, essayText, question, customCri
     }],
     generationConfig: {
       temperature: 0.5,
-      maxOutputTokens: 65536,
-      responseMimeType: 'application/json'
+      maxOutputTokens: 65536
+      // responseMimeType 已移除：JSON mode 會使 Gemini 安全過濾更嚴格，導致 PROHIBITED_CONTENT
     },
     safetySettings: GEMINI_SAFETY_SETTINGS
   };
@@ -1906,6 +1920,144 @@ function handleOpenAIError(error, modelName) {
 
 // ============ Prompt 和解析函數 ============
 
+// ══════════════════════════════════════════════════════════════
+// 【重新生成評語】：按老師調整後的分數重新生成評語（不重新生成增潤/示範）
+// ══════════════════════════════════════════════════════════════
+
+function buildFeedbackOnlyPrompt(essayText, question, teacherGrading) {
+  const { content, expression, structure, punctuation } = teacherGrading;
+  const totalScore = (content * 4) + (expression * 3) + (structure * 2) + punctuation;
+
+  const gradeLabel = (score) => {
+    const labels = { 10:'上上', 9:'上中', 8:'上下', 7:'中上', 6:'中中上', 5:'中中下', 4:'中下', 3:'下上', 2:'下中', 1:'下下' };
+    return labels[Math.max(1, Math.min(10, Math.round(score)))] || '中中';
+  };
+
+  return `你是一位專業的香港中學中文科教師。老師已根據以下評分批改學生作文，請你按照老師給定的分數，為這篇作文撰寫相應水平的評語。
+
+【老師給定的評分（必須嚴格按此分數撰寫評語，不可更改）】
+- 內容（40分，品第制）：${content}分（${gradeLabel(content)}品）
+- 表達（30分，品第制）：${expression}分（${gradeLabel(expression)}品）
+- 結構（20分，品第制）：${structure}分（${gradeLabel(structure)}品）
+- 標點（10分）：${punctuation}分
+- 總分：${totalScore}分
+
+【題目】
+${question}
+
+【學生作文】
+${essayText}
+
+【撰寫評語的要求】
+1. 評語必須與老師給定的分數相符，不得高估或低估學生水平
+2. 每項評語必須引用學生作文的具體句子或段落作依據
+3. 總評須先指出選材是否扣題、立意是否清晰，再指出表達及結構的主要優點和改善建議
+4. strengths和improvements各提供2-3項具體意見
+
+請以JSON格式返回（只包含評語，不包含grading、enhancedText、modelEssay）：
+{
+  "overallComment": "總評（2-3段，引用具體句子，與評分水平相符）",
+  "contentFeedback": {
+    "strengths": ["引用具體句子說明內容優點"],
+    "improvements": ["具體指出選材或立意的不足"]
+  },
+  "expressionFeedback": {
+    "strengths": ["引用具體句子說明表達優點"],
+    "improvements": ["具體指出語病或用詞問題，引用原句"]
+  },
+  "structureFeedback": {
+    "strengths": ["具體說明結構完整性及銜接優點"],
+    "improvements": ["具體指出結構或詳略問題"]
+  },
+  "punctuationFeedback": {
+    "strengths": ["標點優點"],
+    "improvements": ["具體指出標點失誤位置及類型"]
+  }
+}`;
+}
+
+async function regenerateFeedbackWithGemini(apiKey, modelName, essayText, question, teacherGrading) {
+  const prompt = buildFeedbackOnlyPrompt(essayText, question, teacherGrading);
+  const model = modelName || 'gemini-2.0-flash';
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
+        safetySettings: GEMINI_SAFETY_SETTINGS
+      }),
+    }
+  );
+  const data = await response.json();
+  if (data.promptFeedback?.blockReason) throw new Error(`內容被阻擋: ${data.promptFeedback.blockReason}`);
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return parseFeedbackOnlyResult(content);
+}
+
+async function regenerateFeedbackWithOpenAI(apiKey, modelName, essayText, question, teacherGrading) {
+  const prompt = buildFeedbackOnlyPrompt(essayText, question, teacherGrading);
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: modelName || 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+    }),
+  });
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+  return parseFeedbackOnlyResult(content);
+}
+
+async function regenerateFeedbackWithCustom(apiKey, baseURL, modelName, essayText, question, teacherGrading) {
+  const prompt = buildFeedbackOnlyPrompt(essayText, question, teacherGrading);
+  const response = await fetch(`${baseURL}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: modelName,
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+    }),
+  });
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+  return parseFeedbackOnlyResult(content);
+}
+
+function parseFeedbackOnlyResult(content) {
+  try {
+    const clean = content.replace(/```json\n?|\n?```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    const buildFeedback = (fb) => ({
+      strengths: Array.isArray(fb?.strengths) ? fb.strengths : [],
+      improvements: Array.isArray(fb?.improvements) ? fb.improvements : [],
+    });
+    return {
+      overallComment: parsed.overallComment || '',
+      contentFeedback: buildFeedback(parsed.contentFeedback),
+      expressionFeedback: buildFeedback(parsed.expressionFeedback),
+      structureFeedback: buildFeedback(parsed.structureFeedback),
+      punctuationFeedback: buildFeedback(parsed.punctuationFeedback),
+    };
+  } catch (e) {
+    console.error('parseFeedbackOnlyResult error:', e);
+    return {
+      overallComment: '評語生成失敗，請重試。',
+      contentFeedback: { strengths: [], improvements: [] },
+      expressionFeedback: { strengths: [], improvements: [] },
+      structureFeedback: { strengths: [], improvements: [] },
+      punctuationFeedback: { strengths: [], improvements: [] },
+    };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+
 function buildGradingPrompt(gradingMode = 'secondary', contentPriority = false, enhancementDirection = 'auto', genre = '', infoPoints = [], devItems = {}, formatRequirements = []) {
   if (gradingMode === 'primary') {
     return buildPrimaryGradingPrompt();
@@ -1933,105 +2085,168 @@ function buildSecondaryGradingPrompt(contentPriority = false, enhancementDirecti
 
 ${contentPriorityInstruction}
 
-## 評分準則（必須嚴格遵守）
+【給分基準提示】HKDSE一般考生的正常水平對應4至5分。給分時必須有文章的具體根據，不可憑印象估計。若無充分理由支撐6分或以上，應給5分或以下。
 
-### 內容（40分）- 品第制 1-10分
-評分重點：立意深度、取材恰當度、闡述飽滿度
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+一、內容（40分）— 品第制1-10分
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-具體標準：
-- 上上(10分): 立意極豐富深刻，取材極恰當，闡述極飽滿。能深入探討題目，觀點獨到，例子精準有力。
-- 上中(9分): 立意極豐富尚算深刻，取材極恰當，闡述飽滿。觀點清晰，論證充分。
-- 上下(8分): 立意豐富尚算深刻，取材恰當，闡述飽滿。有個人見解，例子適切。
-- 中上(7分): 立意平穩具體，取材合理平穩，闡述合理。符合題目要求，內容完整。
-- 中中上(6分): 立意一般恰當，取材一般，闡述一般。基本符合題目，但深度不足。
-- 中中下(5分): 立意尚具單薄，取材單薄，闡述浮淺。內容簡單，缺乏深度。
-- 中下(4分): 立意十分單薄，取材薄弱，闡述極浮淺。內容貧乏。
-- 下上(3分): 立意模糊不太相干，取材不扣連，闡述欠奉。偏離題目。
-- 下中(2分): 立意十分模糊錯亂，取材混亂，闡述空泛。嚴重離題。
-- 下下(1分): 無立意或錯亂極多，取材闡述闕如。完全離題或無法理解。
+【評分邏輯：先看選材能否扣題，再看立意深度】
 
-### 表達（30分）- 品第制 1-10分
-評分重點：詞彙運用、文句流暢度、修辭手法
+▌第一步：判斷選材扣題程度（決定能否突破5分下限）
 
-具體標準：
-- 上上(10分): 用詞極精確豐富，文句極簡潔流暢，手法純熟靈活。詞藻優美，句式多變，修辭恰當。
-- 上中(9分): 用詞極精確豐富，文句極簡潔流暢，手法純熟。
-- 上下(8分): 用詞精確豐富，文句簡潔流暢，手法靈活。
-- 中上(7分): 用詞準確平穩，文句通順偶有瑕疵，手法尚算靈活。
-- 中中上(6分): 用詞大致準確，文句大致通順有沙石，表達一般。
-- 中中下(5分): 用詞尚算準確，文句尚算通順有明顯語病，表達浮淺。
-- 中下(4分): 用詞粗疏，文句不通順失誤多，表達薄弱。
-- 下上(3分): 用詞不準，文句欠通順，表達混亂。
-- 下中(2分): 用詞句式嚴重錯誤，表達極混亂。
-- 下下(1分): 文句無法達意。
+題目通常包含多個關鍵元素（如「等待發芽的種子」含「等待」「發芽」「種子」三個元素）。評分時須逐一核對：
 
-### 結構（20分）- 品第制 1-10分
-評分重點：結構完整性、詳略安排、鋪排有序
+- 選材能扣緊題目全部關鍵元素，各元素的特質均能體現 → 可給5分或以上
+- 選材只能扣住部分關鍵元素，有明顯遺漏 → 給4分
+- 選材與題目核心元素有根本性偏差（如錯解「種子」的象徵） → 離題，給3分或以下
 
-具體標準：
-- 上上(10分): 結構極完整，詳略極得宜，鋪排主次有序。起承轉合自然，段落分明。
-- 上中(9分): 結構極完整，詳略得宜，鋪排有序。
-- 上下(8分): 結構完整，詳略得宜，鋪排有序。
-- 中上(7分): 結構大致完整，詳略大致合宜，過渡尚算自然。
-- 中中上(6分): 結構尚具完整，詳略一般有輕微失衡。
-- 中中下(5分): 結構尚具，詳略稍失衡，偶有散亂。
-- 中下(4分): 尚具組織，詳略明顯失衡，鋪排失當。
-- 下上(3分): 組織散亂，詳略嚴重失衡。
-- 下中(2分): 毫無組織，鋪排極混亂。
-- 下下(1分): 完全無結構。
+▌第二步：在扣題基礎上，按立意深度往上加分
 
-### 標點（10分）- 5-10分
-- 10分: 標點符號運用正確無誤
-- 9分: 偶有失誤（1-2處）
-- 8分: 有少許失誤（3-4處）
-- 7分: 有失誤（5-6處）
-- 6分: 失誤較多（7-8處）
-- 5分: 有明顯問題（9處以上）
+- 5分（中中下）：扣題，有基本選材，惟立意單薄，缺乏個人體會，闡述浮淺
+- 6分（中中上）：扣題，立意恰當，能配合選材，有一定個人感受，惟深度不足
+- 7分（中上）：扣題，立意平穩具體，能帶出個人體會，選材合理，闡述尚算充實
+- 8分（上下）：扣題，立意豐富，選材恰當，個人體會深刻，闡述飽滿
+- 9分（上中）：扣題，立意極豐富且深刻，選材極恰當，觀點清晰，論證充分
+- 10分（上上）：扣題，立意最深刻獨到，取材極精準，闡述極飽滿，觀點令人深思
 
-## 核心評分準則（必須嚴格遵守）
-1. 【離題扣分規則】如文章離題，內容分數不應高於下上品（即不高於3分）
-2. 內容與結構分數一般不應相差超過2級
-3. 若內容離題（3分及以下），結構最高只能評至7分
-4. 標點分數下限為5分
-5. 請根據文章的實際表現給分，不要過度寬鬆或嚴苛
+▌離題及偏題：
 
-## 增潤文章要求（重要）
+- 3分（下上）：選材基本偏離題目核心元素，立意模糊，闡述欠奉
+- 2分（下中）：選材嚴重偏離題目，立意混亂，闡述空泛
+- 1分（下下）：完全離題或無法理解，取材闡述闕如
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+二、表達（30分）— 品第制1-10分
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【評分邏輯：先看句子通順程度，再看寫作手法運用】
+
+▌第一步：判斷句子通順程度（決定基礎分）
+
+- 句子整體通順，偶有沙石但不影響理解 → 基礎分5分
+- 句子多處不通順，語病明顯影響閱讀 → 給4分
+- 句子嚴重不通順，語病頻密，句子成分殘缺，或多處錯別字 → 給3分或以下
+
+▌第二步：在通順基礎上，按寫作手法往上加分
+
+- 5分（中中下）：句子尚算通順，惟有明顯語病；用詞平淡，欠缺寫作手法
+- 6分（中中上）：句子大致通順，用詞大致準確；偶有寫作手法（如比喻、排比），惟運用一般
+- 7分（中上）：句子通順，偶有瑕疵；用詞準確，寫作手法運用尚算靈活，能配合選材
+- 8分（上下）：句子簡潔流暢；用詞精確豐富，寫作手法運用靈活，能有效配合選材
+- 9分（上中）：句子極流暢；用詞極精確豐富，手法純熟，選材與手法配合緊密
+- 10分（上上）：文句極簡潔流暢；詞藻優美，句式多變，手法純熟靈活，整體表達達到極高水平
+
+▌語言嚴重失誤（3分或以下）：
+
+- 4分（中下）：句子多處不通順，失誤頻密，用詞粗疏，表達薄弱
+- 3分（下上）：句子欠通順，用詞不準，表達混亂
+- 2分（下中）：用詞句式嚴重錯誤，表達極混亂
+- 1分（下下）：文句無法達意
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+三、結構（20分）— 品第制1-10分
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【評分邏輯：先看結構是否完整，再看詳略安排與首尾呼應】
+
+▌第一步：判斷結構完整程度（決定基礎分）
+
+- 有清楚的開頭、中段、結尾，結構完整 → 基礎分5分
+- 結構基本完整但某部分明顯薄弱（如結尾倉促或開頭缺乏引入） → 給4分
+- 結構散亂，開中結欠分明 → 給3分或以下
+
+▌第二步：在完整基礎上，按詳略安排與銜接往上加分
+
+- 5分（中中下）：結構尚具，開中結俱備，惟詳略稍失衡，過渡一般
+- 6分（中中上）：結構完整，詳略大致得宜，段落尚算清晰，輕微失衡
+- 7分（中上）：結構大致完整，詳略大致合宜，過渡尚算自然，或有首尾呼應但未夠緊密
+- 8分（上下）：結構完整，詳略得宜，首尾呼應清晰，段落鋪排有序
+- 9分（上中）：結構極完整，詳略得宜，首尾呼應緊密，鋪排有序
+- 10分（上上）：結構極完整，詳略極得宜，起承轉合自然流暢，首尾呼應精妙，鋪排主次分明
+
+▌結構散亂（3分或以下）：
+
+- 4分（中下）：尚具組織，但詳略明顯失衡，鋪排失當
+- 3分（下上）：組織散亂，詳略嚴重失衡
+- 2分（下中）：毫無組織，鋪排極混亂
+- 1分（下下）：完全無結構
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+四、標點（10分）— 5-10分（下限5分）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- 10分：標點符號運用正確無誤
+- 9分：偶有失誤（1-2處）
+- 8分：有少許失誤（3-4處）
+- 7分：有失誤（5-6處）
+- 6分：失誤較多（7-8處）
+- 5分：有明顯問題（9處以上），標點分數下限為5分
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+核心評分規則（必須嚴格遵守）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. 一般考生正常水平為4至5分，給6分或以上必須有明確文章依據
+2. 離題（選材偏離題目核心元素）→ 內容不高於3分
+3. 內容與結構分數一般不應相差超過2級
+4. 若內容離題（3分或以下），結構最高只能評至7分
+5. 標點分數下限為5分
+6. 每項評語必須引用文章具體句子或段落作依據，不可空泛
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+增潤文章要求
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ${enhancementInstruction}
-- **保留選材扣題**：增潤時必須保留學生原有的選材，但將其修整得符合題目要求，不能替換為全新素材
-- 增潤後的文章應保持學生的原意和風格
-- 修正語病和錯別字
-- 提升表達質量，但避免過度堆砌詞藻
+- 保留學生原有選材，不可替換為全新素材
+- 保持學生原意和風格，修正語病和錯別字
+- 提升表達質量，避免過度堆砌詞藻
 - 保持人文情懷，避免AI感
 
-## 輸出格式
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+示範文章（modelEssay）要求
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- 示範文章必須達到上上品（10/10/10/10）標準
+- 全文字數必須不少於1500字（標點符號計算在內），寧可超過1600字，絕不可少於1500字
+- 必須按以下結構撰寫：
+  【開頭】引人入勝，點出題目關鍵元素，交代情境或立場（約150-200字）
+  【中段】充分展開，每段圍繞一個核心意念，有具體細節描寫或論據支撐，層層遞進（約1000-1100字）
+  【結尾】呼應開頭，昇華主題，令讀者深思（約150-200字）
+- 記敘文：需有細節描寫、對話、內心感受，情節起伏有致
+- 議論文：需有清晰論點、多角度論據、駁論或讓步，邏輯嚴密
+- 描寫文：需有多感官描寫、層次分明，意境深遠
+- 文章需扣緊題目所有關鍵元素，立意獨到深刻，語言優美流暢
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+輸出格式（必須是有效JSON）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 請以JSON格式返回，確保所有字段都存在：
 {
   "grading": {
-    "content": 6,
-    "expression": 6,
-    "structure": 6,
+    "content": 5,
+    "expression": 5,
+    "structure": 5,
     "punctuation": 7
   },
-  "overallComment": "簡潔易明的總評，2-3段，指出主要優點和可改善之處",
+  "overallComment": "總評須先指出文章的選材是否扣題、立意是否清晰，再指出表達及結構的主要優點和具體改善建議，每項必須引用文章具體句子作依據，共2-3段",
   "contentFeedback": {
-    "strengths": ["內容優點1", "內容優點2"],
-    "improvements": ["內容改善建議1", "內容改善建議2"]
+    "strengths": ["引用文章具體句子說明選材扣題的優點"],
+    "improvements": ["具體指出選材或立意的不足，並建議改善方向"]
   },
   "expressionFeedback": {
-    "strengths": ["表達優點1", "表達優點2"],
-    "improvements": ["表達改善建議1", "表達改善建議2"]
+    "strengths": ["引用文章具體句子說明表達的優點"],
+    "improvements": ["具體指出語病或用詞問題，並引用原句說明"]
   },
   "structureFeedback": {
-    "strengths": ["結構優點1", "結構優點2"],
-    "improvements": ["結構改善建議1", "結構改善建議2"]
+    "strengths": ["具體說明結構完整性及銜接的優點"],
+    "improvements": ["具體指出結構或詳略的問題"]
   },
   "punctuationFeedback": {
     "strengths": ["標點優點"],
-    "improvements": ["標點改善建議"]
+    "improvements": ["具體指出標點失誤位置及類型"]
   },
-  "enhancedText": "增潤後的完整文章，避免AI堆砌感，要有人文情懷",
-  "enhancementNotes": ["修改說明1：具體說明修改了什麼", "修改說明2"],
-  "modelEssay": "一篇符合HKDSE上上品標準的奪星文章示範，展示如何更好地處理這個題目"
+  "enhancedText": "增潤後的完整文章，保留學生原意，修正語病，提升表達，避免AI堆砌感",
+  "enhancementNotes": ["具體說明修改了什麼：原句→修改後句子"],
+  "modelEssay": "上上品示範文章，不少於1500字，按開頭/中段/結尾結構，扣緊題目關鍵元素，立意深刻，語言優美"
 }`;
 }
 

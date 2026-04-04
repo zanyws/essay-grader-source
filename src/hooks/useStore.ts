@@ -238,7 +238,7 @@ export const useStore = create<AppState>()(
 
       // 【新增】下一批：只清空學生作品和待上傳文件，保留已批改的報告
       // 讓老師可以上傳下一批5份，繼續累積同班報告
-      resetForNextBatch: () => set((state) => ({
+      resetForNextBatch: () => set(() => ({
         studentWorks: [],
         currentWorkIndex: 0,
         uploadedFiles: [],

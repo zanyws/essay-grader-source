@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronLeft, ChevronRight, RefreshCw, FileText, User, Award, AlertTriangle, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,40 +26,22 @@ interface ReportPageProps {
   onPrev: () => void;
 }
 
-// 生成模擬報告（當API不可用時使用）
 function generateMockReport(studentWork: any, question: string): SecondaryReport {
-  const grading: SecondaryGrading = {
-    content: 6,
-    expression: 6,
-    structure: 6,
-    punctuation: 7,
-  };
+  const grading: SecondaryGrading = { content: 5, expression: 5, structure: 5, punctuation: 7 };
   const totalScore = (grading.content * 4) + (grading.expression * 3) + (grading.structure * 2) + grading.punctuation;
   return {
     studentWork,
     grading,
     totalScore,
     gradeLabel: getGradeLabel(totalScore),
-    overallComment: `本文能圍繞「${question.substring(0, 20)}...」的主題展開，立意尚算明確，取材大致恰當。文章結構完整，起承轉合清晰，表達尚算流暢。惟內容深度有待加強，論述可更為飽滿，用詞可更精準豐富。`,
-    contentFeedback: {
-      strengths: ['立意尚算明確，能圍繞主題展開', '取材大致恰當，能支撐立意'],
-      improvements: ['內容深度有待加強', '論述可更為飽滿深刻', '例子可更具體典型']
-    },
-    expressionFeedback: {
-      strengths: ['文句大致通順', '表達尚算清晰'],
-      improvements: ['用詞可更精準豐富', '句式變化可更多樣', '修辭手法可更靈活運用']
-    },
-    structureFeedback: {
-      strengths: ['結構完整，起承轉合清晰', '段落區分明確'],
-      improvements: ['詳略安排可更得宜', '過渡可更自然流暢']
-    },
-    punctuationFeedback: {
-      strengths: ['標點符號運用大致正確'],
-      improvements: ['部分標點使用可更準確']
-    },
-    enhancedText: studentWork.correctedText + '\n\n[增潤後的內容示例]',
-    enhancementNotes: ['優化用詞', '調整句式', '豐富細節描寫'],
-    modelEssay: '[奪星文章示範]'
+    overallComment: `本文能圍繞「${question.substring(0, 20)}」的主題展開，立意尚算明確，取材大致恰當。惟內容深度有待加強，論述可更為飽滿。`,
+    contentFeedback: { strengths: ['立意尚算明確'], improvements: ['內容深度有待加強'] },
+    expressionFeedback: { strengths: ['文句大致通順'], improvements: ['用詞可更精準豐富'] },
+    structureFeedback: { strengths: ['結構完整'], improvements: ['詳略安排可更得宜'] },
+    punctuationFeedback: { strengths: ['標點大致正確'], improvements: ['部分標點可更準確'] },
+    enhancedText: studentWork.correctedText,
+    enhancementNotes: ['（模擬數據）'],
+    modelEssay: '（模擬數據）',
   };
 }
 
@@ -89,58 +71,78 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
   const [gradingChanged, setGradingChanged] = useState(false);
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [useMockData, setUseMockData] = useState(false);
+
+  // 用 ref 追蹤目前正在批改的 workId，避免 useEffect 重複觸發
+  const generatingForId = useRef<string | null>(null);
 
   const question = useCustomQuestion ? customQuestion : selectedQuestion?.title || '';
   const currentWork = studentWorks[currentWorkIndex];
 
   useEffect(() => {
     if (!currentWork) return;
+
+    // 已有報告，直接顯示
     const existingReport = secondaryReports.find(r => r.studentWork.id === currentWork.id);
     if (existingReport) {
       setCurrentReport(existingReport);
       setGradingChanged(false);
-    } else {
-      generateReport();
+      return;
     }
-  }, [currentWork, secondaryReports, question]);
 
-  const generateReport = async () => {
-    if (!currentWork) return;
+    // 避免對同一篇文章重複觸發生成
+    if (generatingForId.current === currentWork.id) return;
+
+    generateReportForWork(currentWork);
+  }, [currentWorkIndex, currentWork?.id]);
+  // 注意：依賴只用 currentWorkIndex 和 currentWork.id，不依賴 secondaryReports
+  // 避免 addSecondaryReport 後再次觸發 useEffect
+
+  const generateReportForWork = async (work: typeof currentWork) => {
+    if (!work) return;
+    generatingForId.current = work.id;
     setIsGenerating(true);
     setError(null);
     setGradingChanged(false);
+    setCurrentReport(null);
+
     try {
       let newReport: SecondaryReport;
-      if (isAPIAvailable(apiKey) && !useMockData) {
+      if (isAPIAvailable(apiKey)) {
         try {
           const apiConfig: APIConfig = { apiKey, apiType: apiType as any, model: apiModel };
           const apiResult = await gradeSecondaryEssayWithAPI(
-            currentWork.correctedText,
+            work.correctedText,
             question,
             customCriteria,
             apiConfig,
             { contentPriority, enhancementDirection }
           );
-          newReport = { ...apiResult, studentWork: currentWork };
+          newReport = { ...apiResult, studentWork: work };
         } catch (apiError: any) {
-          setError(`API 批改失敗: ${apiError.message}，將使用模擬數據`);
-          setUseMockData(true);
-          newReport = generateMockReport(currentWork, question);
+          setError(`API 批改失敗: ${apiError.message}，已切換至模擬數據`);
+          newReport = generateMockReport(work, question);
         }
       } else {
-        newReport = generateMockReport(currentWork, question);
+        newReport = generateMockReport(work, question);
       }
       addSecondaryReport(newReport);
       setCurrentReport(newReport);
-    } catch (error: any) {
-      setError(error.message || '生成報告失敗');
+    } catch (err: any) {
+      setError(err.message || '生成報告失敗');
     } finally {
       setIsGenerating(false);
+      generatingForId.current = null;
     }
   };
 
-  // 【新功能】按老師調整後的分數重新生成評語（保留增潤文章和示範文章）
+  // 重新生成整份報告（含增潤和示範）
+  const handleRegenerate = () => {
+    if (!currentWork) return;
+    generatingForId.current = null; // 重置，允許重新生成
+    generateReportForWork(currentWork);
+  };
+
+  // 【按老師評分重新生成評語】（不重新生成增潤文章和示範文章）
   const handleRegenerateFeedback = async () => {
     if (!currentReport || !currentWork) return;
     setIsRegeneratingFeedback(true);
@@ -170,7 +172,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
         expressionFeedback: data.expressionFeedback || currentReport.expressionFeedback,
         structureFeedback: data.structureFeedback || currentReport.structureFeedback,
         punctuationFeedback: data.punctuationFeedback || currentReport.punctuationFeedback,
-        // 保留原有增潤文章和示範文章
+        // 保留原有增潤和示範
         enhancedText: currentReport.enhancedText,
         enhancementNotes: currentReport.enhancementNotes,
         modelEssay: currentReport.modelEssay,
@@ -203,8 +205,6 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
     setGradingChanged(true);
   };
 
-  const handleRegenerate = () => { generateReport(); };
-
   const handleExportWord = async () => {
     if (!currentReport) return;
     await exportReportToWord(currentReport, question);
@@ -232,8 +232,8 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-[#4A6FA5] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-[#718096]">正在生成批改報告...</p>
-          {useMockData && <p className="text-xs text-[#718096] mt-2">（使用模擬數據）</p>}
+          <p className="text-[#718096]">正在批改第 {currentWorkIndex + 1} / {studentWorks.length} 篇...</p>
+          <p className="text-sm text-[#718096] mt-1">{currentWork.name}</p>
         </div>
       </div>
     );
@@ -245,7 +245,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
         <div className="text-center">
           <p className="text-[#718096]">無法生成報告</p>
           {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
-          <Button onClick={handleRegenerate} className="mt-4">重試</Button>
+          <Button onClick={handleRegenerate} className="mt-4 bg-[#4A6FA5]">重試</Button>
         </div>
       </div>
     );
@@ -270,7 +270,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
       )}
 
       <div className="grid lg:grid-cols-[320px_1fr] gap-6">
-        {/* Left Panel - Grading Controls */}
+        {/* Left Panel */}
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-4">
@@ -287,20 +287,8 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                 </Alert>
               )}
 
-              <GradingSlider
-                label="內容"
-                value={grading.content}
-                onChange={(v) => handleGradingChange('content', v)}
-                scoreMultiplier={4}
-                description="40分"
-              />
-              <GradingSlider
-                label="表達"
-                value={grading.expression}
-                onChange={(v) => handleGradingChange('expression', v)}
-                scoreMultiplier={3}
-                description="30分"
-              />
+              <GradingSlider label="內容" value={grading.content} onChange={(v) => handleGradingChange('content', v)} scoreMultiplier={4} description="40分" />
+              <GradingSlider label="表達" value={grading.expression} onChange={(v) => handleGradingChange('expression', v)} scoreMultiplier={3} description="30分" />
               <GradingSlider
                 label="結構"
                 value={grading.structure}
@@ -310,14 +298,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                 description="20分"
                 warning={grading.structure >= maxStructureScore ? `內容品級限制，結構最高${getGradeLabel(maxStructureScore)}` : undefined}
               />
-              <GradingSlider
-                label="標點"
-                value={grading.punctuation}
-                onChange={(v) => handleGradingChange('punctuation', v)}
-                min={5}
-                max={10}
-                description="10分"
-              />
+              <GradingSlider label="標點" value={grading.punctuation} onChange={(v) => handleGradingChange('punctuation', v)} min={5} max={10} description="10分" />
 
               <Separator />
 
@@ -327,7 +308,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                 <Badge className="mt-2 text-lg px-3 py-1">{gradeLabel}</Badge>
               </div>
 
-              {/* 【新按鈕】調分後重新生成評語 */}
+              {/* 調分後才顯示的按鈕 */}
               {gradingChanged && (
                 <Button
                   onClick={handleRegenerateFeedback}
@@ -335,24 +316,14 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                   className="w-full gap-2 bg-[#4A6FA5] hover:bg-[#3a5f95]"
                 >
                   {isRegeneratingFeedback ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      重新生成評語中...
-                    </>
+                    <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />重新生成評語中...</>
                   ) : (
-                    <>
-                      <MessageSquare className="w-4 h-4" />
-                      按現有評分重新生成評語
-                    </>
+                    <><MessageSquare className="w-4 h-4" />按現有評分重新生成評語</>
                   )}
                 </Button>
               )}
 
-              <Button
-                onClick={handleRegenerate}
-                variant="outline"
-                className="w-full gap-2"
-              >
+              <Button onClick={handleRegenerate} variant="outline" className="w-full gap-2">
                 <RefreshCw className="w-4 h-4" />
                 重新生成整份報告
               </Button>
@@ -360,7 +331,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
               {!isAPIAvailable(apiKey) && (
                 <Alert className="bg-yellow-50 border-yellow-200">
                   <AlertDescription className="text-yellow-700 text-xs">
-                    API 未設定，正在使用模擬數據。請在右上角設定 API 密鑰以啟用真實批改。
+                    API 未設定，正在使用模擬數據。
                   </AlertDescription>
                 </Alert>
               )}
@@ -368,7 +339,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
           </Card>
         </div>
 
-        {/* Right Panel - Report Content */}
+        {/* Right Panel */}
         <div id="report-content">
           <Card>
             <CardHeader className="pb-4">
@@ -431,9 +402,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
 
                 <TabsContent value="model" className="mt-6">
                   <div className="p-4 bg-[#F7F9FB] rounded-lg">
-                    <p className="text-[#2D3748] whitespace-pre-wrap leading-relaxed">
-                      {currentReport.modelEssay}
-                    </p>
+                    <p className="text-[#2D3748] whitespace-pre-wrap leading-relaxed">{currentReport.modelEssay}</p>
                   </div>
                 </TabsContent>
               </Tabs>
@@ -451,15 +420,9 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
           </Button>
           {studentWorks.length > 1 && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handlePrevWork} disabled={currentWorkIndex === 0}>
-                上一篇
-              </Button>
-              <span className="text-sm text-[#718096]">
-                {currentWorkIndex + 1} / {studentWorks.length}
-              </span>
-              <Button variant="outline" size="sm" onClick={handleNextWork} disabled={currentWorkIndex === studentWorks.length - 1}>
-                下一篇
-              </Button>
+              <Button variant="outline" size="sm" onClick={handlePrevWork} disabled={currentWorkIndex === 0}>上一篇</Button>
+              <span className="text-sm text-[#718096]">{currentWorkIndex + 1} / {studentWorks.length}</span>
+              <Button variant="outline" size="sm" onClick={handleNextWork} disabled={currentWorkIndex === studentWorks.length - 1}>下一篇</Button>
             </div>
           )}
         </div>
@@ -468,7 +431,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
             <FileText className="w-4 h-4" />
             下載 HTML
           </Button>
-          <Button onClick={handleNextWork} className="gap-2">
+          <Button onClick={handleNextWork} className="gap-2 bg-[#4A6FA5] hover:bg-[#3a5f95]">
             {currentWorkIndex < studentWorks.length - 1 ? '下一篇' : '全班報告'}
             <ChevronRight className="w-4 h-4" />
           </Button>

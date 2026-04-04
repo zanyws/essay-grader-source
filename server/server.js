@@ -277,12 +277,13 @@ function normalizeGeminiModelName(modelName) {
   return name;
 }
 
-// Gemini 安全設置 - 解除過濾
+// Gemini 安全設置 - 解除過濾（批改學生作文需要寬鬆設定）
 const GEMINI_SAFETY_SETTINGS = [
   { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
   { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
   { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+  { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+  { category: 'HARM_CATEGORY_CIVIC_INTEGRITY', threshold: 'BLOCK_NONE' }
 ];
 
 // 安全解析 JSON - 增強版
@@ -662,14 +663,25 @@ async function gradeWithGemini(apiKey, modelName, essayText, question, customCri
 
   const data = await response.json();
   
-  // 檢查是否有內容被阻擋
+  // 檢查是否有內容被阻擋（promptFeedback層面）
   if (data.promptFeedback?.blockReason) {
+    // 若為PROHIBITED_CONTENT，加入教育免責聲明重試一次
+    if (data.promptFeedback.blockReason === 'PROHIBITED_CONTENT' || data.promptFeedback.blockReason === 'SAFETY') {
+      console.log('Gemini blocked, retrying with education disclaimer...');
+      return await gradeWithGeminiRetry(apiKey, normalizedModelName, essayText, systemPrompt, userPrompt, essayText, gradingMode);
+    }
     throw new Error(`內容被阻擋: ${data.promptFeedback.blockReason}`);
   }
   
   let content = data.candidates?.[0]?.content?.parts?.[0]?.text;
   
+  // 檢查candidates層面的SAFETY阻擋
   if (!content) {
+    const finishReason = data.candidates?.[0]?.finishReason;
+    if (finishReason === 'SAFETY' || finishReason === 'PROHIBITED_CONTENT') {
+      console.log('Gemini candidate blocked by SAFETY, retrying...');
+      return await gradeWithGeminiRetry(apiKey, normalizedModelName, essayText, systemPrompt, userPrompt, essayText, gradingMode);
+    }
     // 嘗試從其他候選人獲取內容
     if (data.candidates && data.candidates.length > 1) {
       for (let i = 1; i < data.candidates.length; i++) {
@@ -683,12 +695,50 @@ async function gradeWithGemini(apiKey, modelName, essayText, question, customCri
     }
     
     if (!content) {
-      const finishReason = data.candidates?.[0]?.finishReason;
       throw new Error(`Gemini API 返回內容為空 (finishReason: ${finishReason || 'unknown'})`);
     }
   }
 
   return parseGradingResult(content, essayText, gradingMode);
+}
+
+// 當Gemini因安全過濾阻擋時，加入教育免責聲明重試
+async function gradeWithGeminiRetry(apiKey, modelName, originalText, systemPrompt, userPrompt, essayText, gradingMode) {
+  const disclaimerPrefix = `【重要說明】以下內容為香港中學生的中文科作文，純屬教育評核用途。作文中可能含有表達負面情緒、描寫衝突或敏感話題的句子，這是正常的創意寫作內容，請以教育工作者的專業角度進行評核。\n\n`;
+  
+  const retryBody = {
+    contents: [{
+      parts: [{ text: disclaimerPrefix + systemPrompt + '\n\n' + userPrompt }]
+    }],
+    generationConfig: {
+      temperature: 0.5,
+      maxOutputTokens: 65536
+    },
+    safetySettings: GEMINI_SAFETY_SETTINGS
+  };
+
+  const retryResponse = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(retryBody)
+    }
+  );
+
+  const retryData = await retryResponse.json();
+  
+  if (retryData.promptFeedback?.blockReason) {
+    throw new Error(`內容被阻擋: ${retryData.promptFeedback.blockReason}。建議改用 OpenAI 或 DeepSeek API 批改含敏感內容的作文。`);
+  }
+
+  const retryContent = retryData.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!retryContent) {
+    const reason = retryData.candidates?.[0]?.finishReason;
+    throw new Error(`重試後仍被阻擋 (${reason})。建議改用 OpenAI 或 DeepSeek API 批改含敏感內容的作文。`);
+  }
+
+  return parseGradingResult(retryContent, essayText, gradingMode);
 }
 
 // 生成實用寫作模擬卷（新邏輯）

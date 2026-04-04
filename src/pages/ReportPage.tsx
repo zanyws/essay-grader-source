@@ -228,12 +228,29 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
   }
 
   if (isGenerating) {
+    const doneCount = secondaryReports.filter(r => r.studentWork.id !== currentWork?.id).length;
+    const estSeconds = Math.max(30, (studentWorks.length - doneCount) * 45);
+    const estMin = Math.floor(estSeconds / 60);
+    const estSec = estSeconds % 60;
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="text-center">
+        <div className="text-center max-w-sm">
           <div className="w-12 h-12 border-4 border-[#4A6FA5] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-[#718096]">正在批改第 {currentWorkIndex + 1} / {studentWorks.length} 篇...</p>
-          <p className="text-sm text-[#718096] mt-1">{currentWork.name}</p>
+          <p className="text-[#2D3748] font-medium mb-1">
+            正在批改第 {currentWorkIndex + 1} / {studentWorks.length} 篇
+          </p>
+          <p className="text-sm text-[#718096] mb-3">{currentWork?.name}</p>
+          {/* 進度條 */}
+          <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
+            <div
+              className="bg-[#4A6FA5] h-2 rounded-full transition-all"
+              style={{ width: `${((currentWorkIndex) / studentWorks.length) * 100}%` }}
+            />
+          </div>
+          <p className="text-xs text-[#718096]">
+            已完成 {currentWorkIndex} 篇 · 預計剩餘約 {estMin > 0 ? `${estMin} 分 ` : ''}{estSec} 秒
+          </p>
+          <p className="text-xs text-[#718096] mt-1">每篇約需 30–60 秒，請耐心等待</p>
         </div>
       </div>
     );

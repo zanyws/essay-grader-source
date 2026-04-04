@@ -12,14 +12,12 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useStore } from '@/hooks/useStore';
 import { dseQuestions, getQuestionsByYear } from '@/lib/questions';
-import type { FileInfo, StudentWork } from '@/types';
 import { generateId, readFileAsText, readFileAsDataURL } from '@/lib/utils';
 import { extractTextWithAPI, isAPIAvailable } from '@/lib/api';
 import type { APIConfig } from '@/types';
 import { detectQuestionType } from '@/lib/gradingCriteria';
 
 interface SetupPageProps { onNext: () => void; }
-interface ExtendedFileInfo extends FileInfo { file?: File; }
 
 export function SetupPage({ onNext }: SetupPageProps) {
   const {
@@ -47,7 +45,6 @@ export function SetupPage({ onNext }: SetupPageProps) {
     ? detectQuestionType(customQuestion)
     : selectedQuestion ? detectQuestionType(selectedQuestion.title) : 'mixed';
 
-  // 計算已累積的報告數
   const accumulatedCount =
     appMode === 'primary' ? primaryReports.length :
     appMode === 'practical' ? practicalReports.length :
@@ -57,12 +54,15 @@ export function SetupPage({ onNext }: SetupPageProps) {
     if (!e.target.files || e.target.files.length === 0) return;
     const files = Array.from(e.target.files);
     for (const file of files) {
-      const validTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+      const validTypes = [
+        'image/jpeg', 'image/png', 'image/jpg', 'application/pdf',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ];
       if (!validTypes.some(type => file.type === type || file.name.toLowerCase().endsWith(type.split('/')[1]))) {
-        setError(`不支持的文件類型: ${file.name}`); continue;
+        setError(`不支持的文件類型: ${file.name}`);
+        continue;
       }
-      const fileInfo: ExtendedFileInfo = { id: generateId(), name: file.name, size: file.size, type: file.type || 'application/octet-stream', file };
-      addUploadedFile(fileInfo);
+      addUploadedFile({ id: generateId(), name: file.name, size: file.size, type: file.type || 'application/octet-stream', file });
     }
     if (studentFileInputRef.current) studentFileInputRef.current.value = '';
     setSuccess(`已添加 ${files.length} 個文件`);
@@ -118,7 +118,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
           } else {
             addStudentWork({ id: generateId(), name: result.name || '未命名', studentId: result.studentId || '', originalText: result.text, correctedText: result.text });
           }
-        } catch (e: any) {
+        } catch {
           addStudentWork({ id: generateId(), name: '手動輸入', studentId: '', originalText: manualText, correctedText: manualText });
         }
       }
@@ -139,28 +139,30 @@ export function SetupPage({ onNext }: SetupPageProps) {
     onNext();
   };
 
+  const enhancementOptions = [
+    { value: 'auto', label: '自動判斷', desc: detectedDirection !== 'mixed'
+      ? `根據題目自動判斷 - 檢測到：${detectedDirection === 'argumentative' ? '議論類' : detectedDirection === 'descriptive' ? '描寫類' : '記敘抒情類'}`
+      : '根據題目自動判斷（景物描寫/人物描寫/記敘抒情/議論說理）'
+    },
+    { value: 'narrative', label: '記敘說理/抒情', desc: '優先考慮記敘文體風格' },
+    { value: 'argumentative', label: '議論說理', desc: '優先考慮議論文體風格' },
+    { value: 'descriptive', label: '景物描寫/人物描寫', desc: '優先考慮描寫文體風格' },
+  ];
+
   return (
     <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }} className="max-w-6xl mx-auto">
 
-      {/* 【新增】已累積報告橫幅 */}
+      {/* 已累積報告橫幅 */}
       {accumulatedCount > 0 && (
         <div className="mb-6 p-4 bg-blue-50 border border-[#4A6FA5] rounded-lg flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Layers className="w-5 h-5 text-[#4A6FA5] flex-shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-[#4A6FA5]">
-                已累積 {accumulatedCount} 篇批改報告
-              </p>
-              <p className="text-xs text-[#718096] truncate">
-                上傳下一批作文後，報告將繼續累積。完成全班後可查看全班報告。
-              </p>
+              <p className="text-sm font-medium text-[#4A6FA5]">已累積 {accumulatedCount} 篇批改報告</p>
+              <p className="text-xs text-[#718096]">上傳下一批作文後，報告將繼續累積。完成全班後可查看全班報告。</p>
             </div>
           </div>
-          <Button
-            variant="outline" size="sm"
-            className="border-[#4A6FA5] text-[#4A6FA5] flex-shrink-0 hover:bg-blue-50"
-            onClick={() => { setStep(3); onNext(); }}
-          >
+          <Button variant="outline" size="sm" className="border-[#4A6FA5] text-[#4A6FA5] flex-shrink-0 hover:bg-blue-50" onClick={() => { setStep(3); onNext(); }}>
             查看全班報告
           </Button>
         </div>
@@ -171,6 +173,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-6">
         <div className="space-y-6">
+          {/* 上傳學生作品 */}
           <Card>
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Upload className="w-5 h-5 text-[#4A6FA5]" />上傳學生作品</CardTitle></CardHeader>
             <CardContent>
@@ -219,6 +222,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
             </CardContent>
           </Card>
 
+          {/* 批改設定 */}
           <Card>
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Settings2 className="w-5 h-5 text-[#4A6FA5]" />批改設定</CardTitle></CardHeader>
             <CardContent className="space-y-6">
@@ -227,30 +231,36 @@ export function SetupPage({ onNext }: SetupPageProps) {
                 <RadioGroup value={contentPriority ? 'content' : 'standard'} onValueChange={(v) => setContentPriority(v === 'content')} className="space-y-2">
                   <div className="flex items-start space-x-2">
                     <RadioGroupItem value="standard" id="standard" />
-                    <Label htmlFor="standard" className="font-normal cursor-pointer"><div className="font-medium">標準模式</div><div className="text-xs text-[#718096]">各項目獨立評分</div></Label>
+                    <Label htmlFor="standard" className="font-normal cursor-pointer">
+                      <div className="font-medium">標準模式</div>
+                      <div className="text-xs text-[#718096]">各項目獨立評分</div>
+                    </Label>
                   </div>
                   <div className="flex items-start space-x-2">
                     <RadioGroupItem value="content" id="content" />
-                    <Label htmlFor="content" className="font-normal cursor-pointer"><div className="font-medium">以內容為主</div><div className="text-xs text-[#718096]">優先考慮內容品級，結構品級不應高於內容超過1級</div></Label>
+                    <Label htmlFor="content" className="font-normal cursor-pointer">
+                      <div className="font-medium">以內容為主</div>
+                      <div className="text-xs text-[#718096]">優先考慮內容品級，結構品級不應高於內容超過1級</div>
+                    </Label>
                   </div>
                 </RadioGroup>
               </div>
+
               <div className="space-y-3">
                 <Label className="font-medium">增潤文章方向</Label>
                 <RadioGroup value={enhancementDirection} onValueChange={(v) => setEnhancementDirection(v as any)} className="space-y-2">
-                  {[
-                    { value: 'auto', label: '自動判斷', desc: `根據題目自動判斷（景物描寫/人物描寫/記敘抒情/議論說理）${detectedDirection !== 'mixed' ? \` - 檢測到：${detectedDirection === 'argumentative' ? '議論類' : detectedDirection === 'descriptive' ? '描寫類' : '記敘抒情類'}\` : ''}` },
-                    { value: 'narrative', label: '記敘說理/抒情', desc: '優先考慮記敘文體風格' },
-                    { value: 'argumentative', label: '議論說理', desc: '優先考慮議論文體風格' },
-                    { value: 'descriptive', label: '景物描寫/人物描寫', desc: '優先考慮描寫文體風格' },
-                  ].map(({ value, label, desc }) => (
+                  {enhancementOptions.map(({ value, label, desc }) => (
                     <div key={value} className="flex items-start space-x-2">
                       <RadioGroupItem value={value} id={value} />
-                      <Label htmlFor={value} className="font-normal cursor-pointer"><div className="font-medium">{label}</div><div className="text-xs text-[#718096]">{desc}</div></Label>
+                      <Label htmlFor={value} className="font-normal cursor-pointer">
+                        <div className="font-medium">{label}</div>
+                        <div className="text-xs text-[#718096]">{desc}</div>
+                      </Label>
                     </div>
                   ))}
                 </RadioGroup>
               </div>
+
               <div className="space-y-3 pt-4 border-t">
                 <div className="flex items-center space-x-2">
                   <Checkbox id="ignoreRedInk" checked={ignoreRedInk} onCheckedChange={(checked) => setIgnoreRedInk(checked as boolean)} />
@@ -266,6 +276,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
         </div>
 
         <div className="space-y-6">
+          {/* 選擇題目 */}
           <Card>
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Type className="w-5 h-5 text-[#4A6FA5]" />選擇題目</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -281,14 +292,18 @@ export function SetupPage({ onNext }: SetupPageProps) {
                       {years.map(year => (
                         <SelectGroup key={year}>
                           <SelectLabel>{year}年</SelectLabel>
-                          {(questionsByYear[year as unknown as number] as Array<{title: string}>).map((question: {title: string}, idx: number) => (
+                          {(questionsByYear[year as unknown as number] as Array<{ title: string }>).map((question, idx) => (
                             <SelectItem key={idx} value={question.title}>{question.title.substring(0, 40)}...</SelectItem>
                           ))}
                         </SelectGroup>
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedQuestion && <div className="p-4 bg-[#F7F9FB] rounded-lg"><p className="text-sm text-[#2D3748]">{selectedQuestion.title}</p></div>}
+                  {selectedQuestion && (
+                    <div className="p-4 bg-[#F7F9FB] rounded-lg">
+                      <p className="text-sm text-[#2D3748]">{selectedQuestion.title}</p>
+                    </div>
+                  )}
                 </TabsContent>
                 <TabsContent value="custom" className="space-y-4 pt-4">
                   <Textarea placeholder="輸入自定義題目..." value={customQuestion} onChange={(e) => setCustomQuestion(e.target.value)} className="min-h-[100px]" />
@@ -297,10 +312,16 @@ export function SetupPage({ onNext }: SetupPageProps) {
             </CardContent>
           </Card>
 
+          {/* 自定義批改準則 */}
           <Card>
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-[#4A6FA5]" />自定義批改準則</CardTitle></CardHeader>
             <CardContent>
-              <Textarea placeholder="輸入自定義批改準則（可選）。例如：本題要求以第一人稱敘事，描寫需有五感描寫……" value={customCriteria} onChange={(e) => setCustomCriteria(e.target.value)} className="min-h-[100px]" />
+              <Textarea
+                placeholder="輸入自定義批改準則（可選）。例如：本題要求以第一人稱敘事，描寫需有五感描寫……"
+                value={customCriteria}
+                onChange={(e) => setCustomCriteria(e.target.value)}
+                className="min-h-[100px]"
+              />
             </CardContent>
           </Card>
 

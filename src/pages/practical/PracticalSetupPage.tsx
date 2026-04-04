@@ -32,6 +32,7 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     ignoreRedInk,
     uploadedFiles,
     customCriteriaFiles,
+    practicalCriteriaConfirmed,
     apiKey,
     apiType,
     apiModel,
@@ -46,6 +47,12 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     addCustomCriteriaFile,
     removeCustomCriteriaFile,
     clearCustomCriteriaFiles,
+    setPracticalInfoPoints,
+    setPracticalDevItems,
+    setPracticalFormatRequirements,
+    setPracticalCriteriaConfirmed,
+    setPracticalMaterials,
+    resetPracticalCriteria,
     setCurrentWorkIndex,
     setStep,
   } = useStore();
@@ -57,6 +64,16 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [extractedCriteria, setExtractedCriteria] = useState('');
+  // 題目輸入區塊
+  const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
+  const [pastedContent, setPastedContent] = useState('');
+  const [isExtractingCriteria, setIsExtractingCriteria] = useState(false);
+  const [extractedMaterials, setExtractedMaterials] = useState('');
+  // 評分準則確認區塊的本地編輯狀態
+  const [localInfoPoints, setLocalInfoPoints] = useState<string[]>([]);
+  const [localDevLabel, setLocalDevLabel] = useState('');
+  const [newInfoPoint, setNewInfoPoint] = useState('');
+  const [criteriaReady, setCriteriaReady] = useState(false);
   
   const studentFileInputRef = useRef<HTMLInputElement>(null);
   const questionFileInputRef = useRef<HTMLInputElement>(null);
@@ -159,15 +176,31 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
 
       const result = await extractQuestionCriteriaWithAPI(fileContent, file.type, apiConfig);
       
-      if (result.question) {
-        setCustomQuestion(result.question);
+      if (result.question) setCustomQuestion(result.question);
+      if (result.materials) { setPracticalMaterials(result.materials); setExtractedMaterials(result.materials); }
+      if (result.criteria) setExtractedCriteria(result.criteria);
+
+      // 根據文體初始化評分準則確認區的預設值
+      const devDefaults: Record<string, { label: string }> = {
+        speech:     { label: '2項措施、4個措施細項、3項同學意見' },
+        letter:     { label: '2項個人條件、4個條件細項、3項同學意見' },
+        proposal:   { label: '2個建議、4個建議細項、3項同學意見' },
+        report:     { label: '2個調查類別、4個調查意見、2個改善建議' },
+        commentary: { label: '2個目標、4項活動、4項同學意見' },
+        article:    { label: '2個目標、4項活動細項、4項意見' },
+      };
+      const defaultDev = devDefaults[practicalGenre]?.label || '相關細項';
+      setLocalDevLabel(defaultDev);
+
+      // 預設資訊分考核項目（若尚未確認）
+      if (!practicalCriteriaConfirmed) {
+        setLocalInfoPoints(['計劃名稱／活動名稱', '計劃目的／背景', '寫作身份／動機']);
+        resetPracticalCriteria();
+        setCriteriaReady(false);
       }
-      if (result.criteria) {
-        setExtractedCriteria(result.criteria);
-      }
-      
-      setSuccess('已成功提取題目' + (result.criteria ? '和評分準則' : ''));
-      setTimeout(() => setSuccess(null), 3000);
+
+      setSuccess('已成功提取題目' + (result.criteria ? '和評分準則' : '') + '，請在下方確認評分準則');
+      setTimeout(() => setSuccess(null), 4000);
     } catch (e: any) {
       setError(`提取題目失敗: ${e.message}`);
     } finally {
@@ -187,6 +220,88 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     setCustomQuestion('');
     setExtractedCriteria('');
   }, [removeCustomCriteriaFile, setCustomQuestion]);
+
+  // AI 整理：從單一輸入（上傳文件或貼上文字）提取題目、資料、評分準則
+  const handleExtractCriteria = async () => {
+    const hasUploadedFile = customCriteriaFiles.length > 0;
+    const hasPastedContent = pastedContent.trim().length > 0;
+
+    if (!hasUploadedFile && !hasPastedContent) {
+      setError('請先上傳文件或貼上內容');
+      return;
+    }
+    if (!isAPIAvailable(apiKey)) {
+      setError('請先設定有效的 API 密鑰');
+      return;
+    }
+
+    setIsExtractingCriteria(true);
+    setError(null);
+
+    try {
+      const apiConfig: APIConfig = { apiKey, apiType: apiType as any, model: apiModel };
+      let result;
+
+      if (hasPastedContent) {
+        result = await extractQuestionCriteriaWithAPI(pastedContent, 'text/plain', apiConfig);
+      } else {
+        // 使用已上傳的文件（handleQuestionFileChange 已觸發提取）
+        result = { question: customQuestion, materials: '', criteria: extractedCriteria };
+      }
+
+      if (result.question) setCustomQuestion(result.question);
+      if (result.materials) { setPracticalMaterials(result.materials); setExtractedMaterials(result.materials); }
+      if (result.criteria) setExtractedCriteria(result.criteria);
+
+      // 初始化評分準則確認區
+      const devDefaults: Record<string, string> = {
+        speech: '2項措施、4個措施細項、3項同學意見',
+        letter: '2項個人條件、4個條件細項、3項同學意見',
+        proposal: '2個建議、4個建議細項、3項同學意見',
+        report: '2個調查類別、4個調查意見、2個改善建議',
+        commentary: '2個目標、4項活動、4項同學意見',
+        article: '2個目標、4項活動細項、4項意見',
+      };
+      setLocalDevLabel(devDefaults[practicalGenre] || '相關細項');
+      setLocalInfoPoints(['計劃名稱／活動名稱', '計劃目的／背景', '寫作身份／動機']);
+      resetPracticalCriteria();
+      setCriteriaReady(false);
+      setSuccess('AI 已整理內容，請在下方確認評分準則');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (e: any) {
+      setError(`整理失敗：${e.message}`);
+    } finally {
+      setIsExtractingCriteria(false);
+    }
+  };
+
+  // 確認評分準則
+  const handleConfirmCriteria = () => {
+    if (localInfoPoints.length === 0) {
+      setError('請至少填寫一項資訊分考核項目');
+      return;
+    }
+    setPracticalInfoPoints(localInfoPoints);
+    setPracticalDevItems({ label: localDevLabel });
+    // 格式核對項目由後端按文體預設，前端不需另設
+    setPracticalFormatRequirements([]);
+    setPracticalCriteriaConfirmed(true);
+    setCriteriaReady(true);
+    setError(null);
+    setSuccess('評分準則已確認！');
+    setTimeout(() => setSuccess(null), 2000);
+  };
+
+  const handleAddInfoPoint = () => {
+    if (newInfoPoint.trim()) {
+      setLocalInfoPoints([...localInfoPoints, newInfoPoint.trim()]);
+      setNewInfoPoint('');
+    }
+  };
+
+  const handleRemoveInfoPoint = (idx: number) => {
+    setLocalInfoPoints(localInfoPoints.filter((_, i) => i !== idx));
+  };
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -316,6 +431,8 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
         }
       }
 
+      // materials 已在 handleExtractCriteria 儲存，不需重複處理
+
       clearUploadedFiles();
       clearCustomCriteriaFiles();
       setCurrentWorkIndex(0);
@@ -333,7 +450,7 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     }
   };
 
-  const canProceed = customQuestion.trim() && (uploadedFiles.length > 0 || manualText.trim());
+  const canProceed = customQuestion.trim() && (uploadedFiles.length > 0 || manualText.trim()) && (practicalCriteriaConfirmed || criteriaReady);
   const formatInfo = practicalGenre ? PRACTICAL_FORMAT_REQUIREMENTS[practicalGenre] : null;
 
   return (
@@ -464,14 +581,9 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
         </div>
 
         <div className="space-y-6">
+          {/* 文體選擇 */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <FileText className="w-5 h-5 text-[#B5726E]" />
-                上傳題目與評分準則
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="pt-4">
               <div className="space-y-2">
                 <Label>選擇文體</Label>
                 <Select value={practicalGenre} onValueChange={setPracticalGenre}>
@@ -488,45 +600,55 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
                   </SelectContent>
                 </Select>
               </div>
-              
-              <div className="space-y-2">
-                <Label>上傳題目文件</Label>
-                <div
-                  className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-4 text-center hover:border-[#B5726E] hover:bg-[#F7F9FB] transition-colors cursor-pointer"
-                  onClick={() => questionFileInputRef.current?.click()}
-                >
-                  <Upload className="w-6 h-6 text-[#718096] mx-auto mb-2" />
-                  <p className="text-sm text-[#2D3748]">點擊上傳題目文件</p>
-                  <p className="text-xs text-[#718096]">AI將自動分辨題目與評分準則</p>
-                  <input
-                    ref={questionFileInputRef}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"
-                    className="hidden"
-                    onChange={handleQuestionFileChange}
-                  />
-                </div>
+            </CardContent>
+          </Card>
+
+          {/* 題目、資料及評分準則：單一輸入介面 */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileText className="w-5 h-5 text-[#B5726E]" />
+                題目、資料及評分準則
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs text-[#718096]">
+                上傳或貼上完整的題目文件（包含題目、資料一、資料二及評分準則），AI 將自動分別提取各項內容。
+              </p>
+
+              {/* 輸入方式切換 */}
+              <div className="flex gap-2">
+                <Button size="sm"
+                  variant={inputMode === 'upload' ? 'default' : 'outline'}
+                  className={inputMode === 'upload' ? 'bg-[#B5726E] hover:bg-[#a5625e]' : ''}
+                  onClick={() => setInputMode('upload')}>上傳文件</Button>
+                <Button size="sm"
+                  variant={inputMode === 'paste' ? 'default' : 'outline'}
+                  className={inputMode === 'paste' ? 'bg-[#B5726E] hover:bg-[#a5625e]' : ''}
+                  onClick={() => setInputMode('paste')}>貼上文字</Button>
               </div>
 
-              {isExtractingQuestion && (
-                <div className="flex items-center justify-center p-4 bg-[#F7F9FB] rounded-lg">
-                  <div className="w-5 h-5 border-2 border-[#B5726E] border-t-transparent rounded-full animate-spin mr-2" />
-                  <span className="text-sm text-[#718096]">正在提取題目...</span>
-                </div>
-              )}
-
-              {customQuestion && (
+              {inputMode === 'upload' ? (
                 <div className="space-y-2">
-                  <Label>提取的題目</Label>
-                  <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-40 overflow-y-auto">
-                    {customQuestion}
+                  <div
+                    className="border-2 border-dashed border-[#E2E8F0] rounded-lg p-6 text-center hover:border-[#B5726E] hover:bg-[#F7F9FB] transition-colors cursor-pointer"
+                    onClick={() => questionFileInputRef.current?.click()}>
+                    <Upload className="w-8 h-8 text-[#718096] mx-auto mb-2" />
+                    <p className="text-sm text-[#2D3748] font-medium">點擊上傳題目文件</p>
+                    <p className="text-xs text-[#718096] mt-1">支持 JPG、PNG、PDF、Word 格式</p>
+                    <p className="text-xs text-[#718096]">AI 將自動提取題目、資料及評分準則</p>
+                    <input ref={questionFileInputRef} type="file"
+                      accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.txt"
+                      className="hidden" onChange={handleQuestionFileChange} />
                   </div>
-                </div>
-              )}
 
-              {customCriteriaFiles.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium">已上傳題目文件</p>
+                  {isExtractingQuestion && (
+                    <div className="flex items-center p-3 bg-[#F7F9FB] rounded-lg">
+                      <div className="w-4 h-4 border-2 border-[#B5726E] border-t-transparent rounded-full animate-spin mr-2" />
+                      <span className="text-sm text-[#718096]">正在提取內容...</span>
+                    </div>
+                  )}
+
                   {customCriteriaFiles.map((file) => (
                     <div key={file.id} className="flex items-center justify-between p-2 bg-[#F7F9FB] rounded-lg">
                       <div className="flex items-center gap-2 min-w-0">
@@ -538,23 +660,162 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
                       </Button>
                     </div>
                   ))}
-                </div>
-              )}
 
-              {extractedCriteria && (
+                  {customQuestion && (
+                    <div className="space-y-2 mt-2">
+                      <div>
+                        <p className="text-xs font-medium text-[#718096] mb-1">✅ 題目：</p>
+                        <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-24 overflow-y-auto">{customQuestion}</div>
+                      </div>
+                      {extractedMaterials && (
+                        <div>
+                          <p className="text-xs font-medium text-[#718096] mb-1">✅ 資料內容（資料一及資料二）：</p>
+                          <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-32 overflow-y-auto whitespace-pre-wrap">{extractedMaterials}</div>
+                        </div>
+                      )}
+                      {extractedCriteria && (
+                        <div>
+                          <p className="text-xs font-medium text-[#718096] mb-1">✅ 評分準則：</p>
+                          <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-24 overflow-y-auto text-[#718096]">{extractedCriteria}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
                 <div className="space-y-2">
-                  <Label>提取的評分準則</Label>
-                  <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-40 overflow-y-auto">
-                    {extractedCriteria}
-                  </div>
+                  <Textarea
+                    placeholder="請貼上完整的題目文件內容（包含題目、資料一、資料二及評分準則）..."
+                    value={pastedContent}
+                    onChange={(e) => setPastedContent(e.target.value)}
+                    className="min-h-[200px] text-sm" />
+
+                  {/* AI 整理按鈕（貼上模式） */}
+                  <Button onClick={handleExtractCriteria}
+                    disabled={isExtractingCriteria || !pastedContent.trim()}
+                    className="w-full gap-2 bg-[#B5726E] hover:bg-[#a5625e]" size="sm">
+                    {isExtractingCriteria ? (
+                      <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />AI 整理中...</>
+                    ) : (
+                      <><FileEdit className="w-4 h-4" />AI 整理內容</>
+                    )}
+                  </Button>
+
+                  {customQuestion && (
+                    <div className="space-y-2 mt-2">
+                      <div>
+                        <p className="text-xs font-medium text-[#718096] mb-1">✅ 題目：</p>
+                        <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-24 overflow-y-auto">{customQuestion}</div>
+                      </div>
+                      {extractedMaterials && (
+                        <div>
+                          <p className="text-xs font-medium text-[#718096] mb-1">✅ 資料內容（資料一及資料二）：</p>
+                          <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-32 overflow-y-auto whitespace-pre-wrap">{extractedMaterials}</div>
+                        </div>
+                      )}
+                      {extractedCriteria && (
+                        <div>
+                          <p className="text-xs font-medium text-[#718096] mb-1">✅ 評分準則：</p>
+                          <div className="p-3 bg-[#F7F9FB] rounded-lg text-sm max-h-24 overflow-y-auto text-[#718096]">{extractedCriteria}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
 
+          {/* 確認評分準則區塊 */}
+          {customQuestion && (
+            <Card className={practicalCriteriaConfirmed ? 'border-green-300' : 'border-amber-200'}>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileEdit className="w-5 h-5 text-[#B5726E]" />
+                  確認評分準則
+                  {practicalCriteriaConfirmed && (
+                    <span className="ml-auto text-xs text-green-600 font-normal flex items-center gap-1">
+                      <Check className="w-3 h-3" /> 已確認
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* 資訊分考核項目 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    資訊分考核項目
+                    <span className="ml-1 text-xs text-[#718096] font-normal">（全部提及得2分，欠1項得1分）</span>
+                  </Label>
+                  <div className="space-y-1">
+                    {localInfoPoints.map((point, idx) => (
+                      <div key={idx} className="flex items-center gap-2 p-2 bg-[#F7F9FB] rounded-lg">
+                        <span className="text-xs text-[#718096] w-4">{idx + 1}.</span>
+                        <span className="text-sm flex-1">{point}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveInfoPoint(idx)}
+                          className="h-6 w-6 p-0"
+                        >
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="新增考核項目..."
+                      value={newInfoPoint}
+                      onChange={(e) => setNewInfoPoint(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddInfoPoint()}
+                      className="flex-1 text-sm px-3 py-1.5 border border-[#E2E8F0] rounded-md focus:outline-none focus:border-[#B5726E]"
+                    />
+                    <Button variant="outline" size="sm" onClick={handleAddInfoPoint}>
+                      新增
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 內容發展細項數量 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">
+                    內容發展細項數量
+                    <span className="ml-1 text-xs text-[#718096] font-normal">（影響齊全／大致齊全判斷）</span>
+                  </Label>
+                  <input
+                    type="text"
+                    value={localDevLabel}
+                    onChange={(e) => setLocalDevLabel(e.target.value)}
+                    className="w-full text-sm px-3 py-1.5 border border-[#E2E8F0] rounded-md focus:outline-none focus:border-[#B5726E]"
+                    placeholder="例如：2個建議、4個細項、3項同學意見"
+                  />
+                </div>
+
+                <Button
+                  onClick={handleConfirmCriteria}
+                  className="w-full gap-2 bg-[#B5726E] hover:bg-[#a5625e]"
+                  size="sm"
+                >
+                  <Check className="w-4 h-4" />
+                  {practicalCriteriaConfirmed ? '更新評分準則' : '確認評分準則'}
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">批改設定</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">批改設定</CardTitle>
+                {practicalCriteriaConfirmed && (
+                  <Button variant="ghost" size="sm" className="text-xs text-[#718096] h-7"
+                    onClick={() => { resetPracticalCriteria(); setLocalInfoPoints([]); setLocalDevLabel(''); setCriteriaReady(false); }}>
+                    清除批改設定
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center space-x-2">
@@ -579,6 +840,12 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
               </div>
             </CardContent>
           </Card>
+
+          {customQuestion && !practicalCriteriaConfirmed && !criteriaReady && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-700">請在上方確認評分準則後才能開始批改</p>
+            </div>
+          )}
 
           <Button 
             onClick={handleStartProcessing} 

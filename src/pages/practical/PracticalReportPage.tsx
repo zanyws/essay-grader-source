@@ -24,6 +24,10 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
     customQuestion,
     practicalGenre,
     customCriteria,
+    practicalInfoPoints,
+    practicalDevItems,
+    practicalFormatRequirements,
+    practicalMaterials,
     apiKey,
     apiType,
     apiModel,
@@ -50,6 +54,95 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
     }
   }, [currentWork, practicalReports, customQuestion]);
 
+  // 把【拓展】...【/拓展】標記轉換成藍色粗體 HTML
+  // 身份關鍵詞（用於識別署名身份行）
+  const ROLE_KEYWORDS = ['主席', '會長', '幹事', '大使', '委員', '代表', '老師', '負責人', '召集人', '社長', '學生會'];
+  const SIGN_KEYWORDS = ['謹啟', '謹呈', '謹上', '敬啟', '敬呈', '拜啟', '頓首', '謹識'];
+
+  const parseEssayToHtml = (text: string): string => {
+    // 先處理拓展標記
+    const processExpand = (t: string) =>
+      t.replace(/<strong[^>]*color[^>]*>/gi, '<strong style="color:#2563eb;font-weight:700">')
+       .replace(/<\/strong>/gi, '</strong>')
+       // 容錯：兼容 AI 生成的各種錯誤標記格式
+       .replace(/【拓展[】）}]?/g, '<strong style="color:#2563eb;font-weight:700">')
+       .replace(/【\/拓展[】）}]/g, '</strong>')
+       .replace(/\[拓展\]/g, '<strong style="color:#2563eb;font-weight:700">')
+       .replace(/\[\/拓展\]/g, '</strong>')
+       .replace(/<\/strong>\s*<strong[^>]*>/g, '');
+
+    const lines = text.split('\n');
+    const totalLines = lines.length;
+    const result: string[] = [];
+
+    // 找最後幾行（署名和日期通常在最後6行）
+    const lastFewStart = Math.max(0, totalLines - 7);
+
+    // 預先掃描：找出署名姓名行的索引，方便識別其上一行為身份行
+    const signNameIndexes = new Set<number>();
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (idx >= lastFewStart && SIGN_KEYWORDS.some(k => trimmed.includes(k))) {
+        signNameIndexes.add(idx);
+      }
+    });
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        result.push('<div style="margin:0.8em 0"></div>');
+        return;
+      }
+
+      const processed = processExpand(trimmed);
+      const isInLastSection = idx >= lastFewStart;
+      const isInFirstSection = idx < 8;
+
+      // ① 標題識別：含「建議」或「報告」二字，字數 < 25，在文章前10行
+      //    排除含「：」的行（那是上款），排除含常見正文詞的行
+      const TITLE_EXCLUDE = ['同學', '希望', '匯報', '上報', '計劃中', '提出', '相信', '認為'];
+      const isTitle = isInFirstSection &&
+        ((/建議/.test(trimmed) || /報告/.test(trimmed))) &&
+        trimmed.length < 30 &&
+        !trimmed.includes('：') && !trimmed.includes(':') &&
+        !TITLE_EXCLUDE.some(w => trimmed.includes(w));
+
+      // ② 署名姓名行：含謹啟/謹呈，在文末
+      const isSignName = signNameIndexes.has(idx);
+
+      // ③ 署名身份行：在文末，緊接在署名姓名行之前（idx+1 是姓名行）
+      //    或評論/專題文章無謹啟時，識別文末短行為身份行
+      const noSignKeywords = signNameIndexes.size === 0;
+      const isSignRole = isInLastSection && !isSignName && (
+        signNameIndexes.has(idx + 1) ||
+        (ROLE_KEYWORDS.some(k => trimmed.includes(k)) && trimmed.length < 15) ||
+        (noSignKeywords && idx >= totalLines - 3 && trimmed.length < 12 && !/[。！？，]$/.test(trimmed))
+      ) && !trimmed.includes('：') && !trimmed.includes(':');
+
+      // ④ 日期行：含年月日格式，在文末
+      const isDate = isInLastSection &&
+        /[二零一九八七六五四三兩〇0-9]{4}年.*月.*[日號]/.test(trimmed);
+
+      // 套用格式
+      // 階梯式署名：身份行比姓名行多一點右 padding（身份往左偏）
+      if (isTitle) {
+        result.push(`<div style="text-align:center;font-weight:bold;margin:0.6em 0">${processed}</div>`);
+      } else if (isSignRole) {
+        // 身份行：靠右但往左空兩格（即右邊有縮排）
+        result.push(`<div style="text-align:right;padding-right:3em;margin:0.1em 0">${processed}</div>`);
+      } else if (isSignName) {
+        // 姓名行：靠右頂格（右邊無縮排）
+        result.push(`<div style="text-align:right;padding-right:0;margin:0.1em 0">${processed}</div>`);
+      } else if (isDate) {
+        result.push(`<div style="text-align:left;margin:0.3em 0">${processed}</div>`);
+      } else {
+        result.push(`<div style="margin:0.2em 0">${processed}</div>`);
+      }
+    });
+
+    return result.join('');
+  };
+
   const generateReport = async () => {
     if (!currentWork) return;
     setIsGenerating(true);
@@ -68,9 +161,16 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
           
           const apiResult = await gradePracticalEssayWithAPI(
             currentWork.correctedText,
-            `${customQuestion}\n\n文體：${practicalGenre}`,
+            customQuestion,
             customCriteria,
-            apiConfig
+            apiConfig,
+            {
+              genre: practicalGenre,
+              infoPoints: practicalInfoPoints,
+              devItems: practicalDevItems,
+              formatRequirements: practicalFormatRequirements,
+              materials: practicalMaterials,
+            }
           );
           
           newReport = { ...apiResult, studentWork: currentWork };
@@ -254,12 +354,14 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
   </div>
 
   <h2>增潤文章</h2>
-  <div class="essay-box">${currentReport.enhancedText}</div>
+  <p style="font-size:13px;color:#4a6fa5;margin-bottom:8px">藍色粗體部分為內容拓展示範，供學生參考。</p>
+  <div class="essay-box" style="white-space:normal;line-height:2">${parseEssayToHtml(currentReport.enhancedText)}</div>
 
   <h2>示範文章</h2>
-  <div class="essay-box">${currentReport.modelEssay}</div>
+  <p style="font-size:13px;color:#4a6fa5;margin-bottom:8px">藍色粗體部分為內容拓展示範，供學生參考。</p>
+  <div class="essay-box" style="white-space:normal;line-height:2">${parseEssayToHtml(currentReport.modelEssay)}</div>
 
-  <p class="meta" style="margin-top: 40px; font-size: 12px;">由中文科作文批改系統生成</p>
+
 </body>
 </html>`;
 
@@ -314,7 +416,7 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
         </Alert>
       )}
 
-      <div className="grid lg:grid-cols-[320px_1fr] gap-6">
+      <div className="grid lg:grid-cols-[280px_1fr_1fr] gap-4">
         <div className="space-y-4">
           <Card>
             <CardHeader className="pb-4">
@@ -377,6 +479,23 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
                 <RefreshCw className="w-4 h-4" />
                 重新生成
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* 中欄：學生原文 */}
+        <div>
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#718096]" />
+                學生原文
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-sm whitespace-pre-wrap leading-8 max-h-[70vh] overflow-y-auto text-[#2D3748]">
+                {currentWork.correctedText}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -445,15 +564,15 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
                 </TabsContent>
 
                 <TabsContent value="enhanced" className="mt-4">
-                  <div className="p-4 bg-[#F7F9FB] rounded-lg whitespace-pre-wrap">
-                    {currentReport.enhancedText}
-                  </div>
+                  <p className="text-xs text-[#718096] mb-2">藍色粗體部分為內容拓展示範，供學生參考。</p>
+                  <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-8"
+                    dangerouslySetInnerHTML={{ __html: parseEssayToHtml(currentReport.enhancedText) }} />
                 </TabsContent>
 
                 <TabsContent value="model" className="mt-4">
-                  <div className="p-4 bg-[#F7F9FB] rounded-lg whitespace-pre-wrap">
-                    {currentReport.modelEssay}
-                  </div>
+                  <p className="text-xs text-[#718096] mb-2">藍色粗體部分為內容拓展示範，供學生參考。</p>
+                  <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-8"
+                    dangerouslySetInnerHTML={{ __html: parseEssayToHtml(currentReport.modelEssay) }} />
                 </TabsContent>
               </Tabs>
             </CardContent>

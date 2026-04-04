@@ -304,12 +304,26 @@ export async function gradePrimaryEssayWithAPI(
   }
 }
 
+// 實用寫作評分細項類型
+export interface PracticalDevItems {
+  label?: string;
+  fullCount?: string;
+  partCount?: string;
+}
+
 // 實用寫作批改
 export async function gradePracticalEssayWithAPI(
   essayText: string,
   question: string,
   customCriteria: string,
-  config: APIConfig
+  config: APIConfig,
+  options: {
+    genre?: string;
+    infoPoints?: string[];
+    devItems?: PracticalDevItems;
+    formatRequirements?: string[];
+    materials?: string;
+  } = {}
 ): Promise<PracticalReport> {
   if (!isAPIAvailable(config.apiKey)) {
     throw new Error('API 密鑰無效，請在右上角設定正確的 API 密鑰');
@@ -328,6 +342,11 @@ export async function gradePracticalEssayWithAPI(
         question: question,
         customCriteria: customCriteria,
         gradingMode: 'practical',
+        genre: options.genre || '',
+        infoPoints: options.infoPoints || [],
+        devItems: options.devItems || {},
+        formatRequirements: options.formatRequirements || [],
+        materials: options.materials || '',
       }),
     });
 
@@ -382,6 +401,7 @@ export async function extractQuestionCriteriaWithAPI(
   config: APIConfig
 ): Promise<{
   question: string;
+  materials: string;
   criteria: string;
 }> {
   if (!isAPIAvailable(config.apiKey)) {
@@ -424,6 +444,7 @@ export async function extractQuestionCriteriaWithAPI(
 
     return {
       question: data.question || '',
+      materials: data.materials || '',
       criteria: data.criteria || '',
     };
   } catch (error: any) {
@@ -437,8 +458,118 @@ export async function extractQuestionCriteriaWithAPI(
   }
 }
 
+const GENRE_LABELS: Record<string, string> = {
+  speech: '演講辭',
+  letter: '書信／公開信',
+  proposal: '建議書',
+  report: '報告',
+  commentary: '評論文章',
+  article: '專題文章',
+};
+
+// 六種文體詳細格式要求、扣分陷阱及內容發展細項數量要求
+const GENRE_FORMAT_GUIDE: Record<string, string> = {
+  speech: `【演講辭必備格式】
+- 稱謂：寫在文章開首第一行頂格，按「先尊後卑」次序排列，末尾必須有冒號（例如：校長、各位老師、各位同學：）
+- 自我介紹：寫在開首引入正文前，交代自己的身份（例如：大家好，我是學生會主席……）
+- 文末致謝：寫在文章最末尾（例如：多謝各位。）
+【扣分陷阱】
+- 切勿添加書信格式，如「鈞鑒」、「敬啟者」、「此致」、「祝頌語」等
+【行文語氣評分重點】
+- 以「說明效果」為主：語氣親切、具感染力，能有效游說聽眾
+【內容發展細項數量（供評分參考使用）】
+- 資料一應提供：2項核心措施＋2項配套措施（共4項，列於表格）
+- 資料二應提供：3項同學意見（1則支持、2則疑慮）＋1則寫作者宣布演講
+- 評分參考細項：2項措施、4個措施細項、3項同學意見`,
+
+  letter: `【書信／公開信必備格式】
+- 上款／稱謂：寫在文章開首，頂格書寫收信人（例如：王老師／各位同學：）
+- 祝頌語：寫在正文後，先空兩格寫「祝」，再於下一行頂格寫祝福語（例如：祝↵教安）
+- 署名：寫在祝頌語下一行，分兩行書寫，均靠右，身份行空兩格在前，姓名行頂格在後（階梯式）
+  例如：學生會主席↵　　林美珊謹啟
+- 日期：寫在署名下一行，靠左頂格，必須寫上完整的年、月、日
+【格式注意】
+- 「祝」字獨立一行，下一行才寫祝福語
+- 署名必須分兩行：身份行往左空兩格，姓名行靠右頂格（形成階梯，姓名比身份更靠右）
+- 日期靠左頂格，不靠右
+【扣分陷阱】
+- 切勿在開首寫「本文旨在說明」或使用演講辭的自我介紹格式（如：大家好，我是……）
+- 切勿把祝頌語、署名寫在同一行
+【行文語氣評分重點】
+- 視乎題目類型：自薦信以「自薦效果」為主；公開信／一般書信以「游說／呼籲效果」為主
+- 語氣誠懇、有禮，符合書信的正式場合
+【內容發展細項數量（供評分參考使用）】
+- 資料一應提供：篩選條件2項＋相關細項說明（列於宣傳單張）
+- 資料二應提供：3項同學意見（疑慮或看法）＋1則寫作者宣布撰文
+- 評分參考細項：2項個人條件、4個條件細項（經歷及履歷）、3項同學意見`,
+
+  proposal: `【建議書必備格式】
+- 上款：與書信相同，頂格書寫收信人（例如：圖書館主任張老師：）——上款只出現一次，正文前不應再重複稱謂
+- 標題：寫在上款下一行，置中書寫，必須包含「建議」二字（例如：優化「電子閱讀推廣計劃」建議）
+- 署名：與書信相同，分兩行書寫，身份行空兩格，姓名行頂格（階梯式），均靠右
+  例如：文學社社長↵　　周子晴謹啟
+- 日期：與書信相同，署名下一行靠左頂格，寫上完整的年、月、日
+【扣分陷阱】
+- 建議書屬公務文書，不應添加「祝頌語」
+- 標題必須有「建議」二字，否則視為格式錯誤
+【行文語氣評分重點】
+- 以「說服效果」為主：語氣客觀、正式，建議具體可行
+【內容發展細項數量（供評分參考使用）】
+- 資料一應提供：2個建議方向＋4個建議細項（列於表格）
+- 資料二應提供：3項同學意見（疑慮或支持）＋1則寫作者宣布撰文
+- 評分參考細項：2個建議、4個建議細項、3項同學意見`,
+
+  report: `【報告必備格式】
+- 上款：與書信相同，頂格書寫呈交對象（例如：陳校長：）——上款只出現一次，正文前不應再重複稱謂
+- 標題：寫在上款下一行，置中書寫，必須包含「報告」二字（例如：「校園問卷調查」工作報告）
+- 署名：與書信相同，分兩行書寫，身份行空兩格，姓名行頂格（階梯式），均靠右
+  例如：學生會會長↵　　王子樂謹啟
+- 日期：與書信相同，署名下一行靠左頂格，寫上完整的年、月、日
+【扣分陷阱】
+- 切勿加入「多謝各位」、「祝頌語」或「專此」等非報告格式用語
+- 標題必須有「報告」二字，否則視為格式錯誤
+【報告文體特性（非常重要）】
+- 報告的核心任務是「匯報調查結果＋提出改善建議」，具有調查性質
+- 資料一應是「調查問卷結果」或「意見收集結果」，呈現調查數據或統計
+- 語氣應客觀、正式，避免主觀情感語句（如「本人深信」、「令人鼓舞」）
+【行文語氣評分重點】
+- 以「客觀匯報效果」為主：語氣正式、客觀，資料呈現清晰有條理
+【內容發展細項數量（供評分參考使用）】
+- 資料一應提供：調查結果2個類別（每類2–3項具體數據，列於表格）
+- 資料二應提供：4項同學意見（正反皆有）＋1則寫作者宣布撰寫報告
+- 評分參考細項：2個調查類別、4個調查意見、2個改善建議`,
+
+  commentary: `【評論文章必備格式】
+- 標題：寫在文章頂部，置中書寫，交代文章主題（例如：功課輔導立意佳　微調細節收效大）
+- 署名：寫在文末，分兩行書寫，身份行空兩格，姓名行頂格（階梯式），均靠右，不寫「啟」
+  例如：學生會主席↵　　林美珊
+【扣分陷阱】
+- 評論屬「文章」類別，切勿加上書信的「上款」、「祝頌語」，也不需要「日期」
+- 署名不寫「啟」字
+【行文語氣評分重點】
+- 以「論證效果」為主：語氣客觀持平，立場清晰，論證有力
+【內容發展細項數量（供評分參考使用）】
+- 資料一應提供：計劃目標2個＋活動4項（列於表格）
+- 資料二應提供：4項同學意見（正反皆有）＋1則寫作者宣布撰文
+- 評分參考細項：2個目標、4項活動、4項同學意見`,
+
+  article: `【專題文章必備格式】
+- 標題：寫在文章頂部，置中書寫，帶出主題核心價值（例如：舞台展現自我　合作成就精彩）
+- 署名：與評論文章相同，寫在文末，分兩行書寫，身份行空兩格，姓名行頂格（階梯式），均靠右，不寫「啟」
+  例如：戲劇學會主席↵　　蘇樂行
+【扣分陷阱】
+- 切勿加上「上款」、「祝頌語」及「日期」，否則被視為添加多餘格式扣2分
+- 署名不寫「啟」字
+【行文語氣評分重點】
+- 以「說明效果」為主：語氣客觀、有說服力，能有效呼籲讀者
+【內容發展細項數量（供評分參考使用）】
+- 資料一應提供：計劃目標2個＋活動4項（列於表格）
+- 資料二應提供：4項居民或同學意見（正反皆有）＋1則寫作者宣布撰文
+- 評分參考細項：2個目標、4項活動細項、4項意見`,
+};
+
 // 生成實用寫作模擬卷（新邏輯：上傳模擬卷→生成新模擬卷）
-export async function generatePracticalExamWithAPI  (
+export async function generatePracticalExamWithAPI(
   fileContent: string,
   fileType: string,
   genre: string,
@@ -452,7 +583,188 @@ export async function generatePracticalExamWithAPI  (
     const isImage = fileType.startsWith('image/');
     const isPDF = fileType === 'application/pdf' || fileType.includes('pdf');
     const useInlineData = isImage || isPDF;
-    
+
+    const genreLabel = GENRE_LABELS[genre] || genre;
+    const genreFormatGuide = GENRE_FORMAT_GUIDE[genre] || '';
+
+    // 詳細的 DSE 香港中文卷二甲部 prompt 指引（根據真實考卷規律設計）
+    const systemPrompt = `你是香港 DSE 中文科卷二甲部（實用寫作）的出題專家，專門設計符合考評局要求的模擬試卷。
+
+【你的任務】
+根據用戶提供的參考模擬卷，理解其主題方向，然後設計一份全新的模擬試卷，文體為「${genreLabel}」。新試卷必須保持與參考卷相同的主題方向（如環保、閱讀推廣、健康生活、社區服務等），讓學生就相同主題作第二次練習，加強拓展能力。但情境、計劃名稱、機構名稱、具體活動內容和人物姓名必須完全不同，避免重複。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+一、題目設計（必須嚴格遵守以下公式）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+題目必須包含以下五個要素，缺一不可：
+
+① 情境背景：[學校名稱]將[發起某計劃或活動，或引起討論]
+   【報告文體例外】情境應為「[機構]就[某議題]進行了問卷調查／意見收集，現就結果作報告」
+② 身份：試以[學校名稱][職銜][中文姓名（三字）]的名義
+③ 文體及發表場合：撰寫[${genreLabel}]，[具體發表場合，如：在早會時段說明／刊登於校報《XX通訊》]
+④ 寫作任務一：[說明計劃的意義／分析計劃的利弊／就計劃提出看法]
+   【報告文體例外】任務一應為「就調查結果作報告，說明[調查議題]的現況」
+⑤ 寫作任務二：並[鼓勵同學積極參與／建議校方作出改善／回應同學的意見]
+   【報告文體例外】任務二應為「根據調查結果，提出改善建議」
+⑥ 字數：（全文不得多於550字，標點符號計算在內。）
+
+題目範例格式：
+「[學校名稱]將於本學年參與[機構名稱]的「[計劃名稱]」計劃，試以[學校名稱][職銜][姓名]的名義，撰寫[文體及場合]，[任務一]，並[任務二]。（全文不得多於550字，標點符號計算在內。）」
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+二、資料一設計（官方文件形式）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+標題格式：「資料一：[機構名稱]「[計劃名稱]」[文件類型（宣傳單張／計劃通告／海報節錄）]」
+
+【報告文體例外（非常重要）】
+若文體為報告，資料一必須是「問卷調查結果」或「意見收集統計」，而非活動通告：
+- 標題格式改為：「資料一：[學校名稱]「[計劃名稱]」問卷調查結果（節錄）」
+- 內容呈現：調查背景1–2句＋結果表格（兩欄：調查項目｜結果數據），共2個類別各2–3項結果
+- 語氣客觀，以數據呈現，例如「逾六成同學認為……」「約四成同學表示……」
+
+【其他文體資料一格式】
+內容必須包含：
+- 機構名稱（置中標題）
+- 計劃名稱（置中副標題）
+- 背景說明：1–2句，說明社會背景或問題，引出計劃目的
+- 計劃目的：1句，說明計劃希望達到的效果
+- 活動內容表格：必須有表格，兩欄（活動名稱｜內容），共2–3行
+  • 每項活動名稱簡潔（4–8字）
+  • 每項活動內容具體（10–20字），說明活動如何進行
+- 其他資訊（可選）：申請條件、截止日期、聯絡方式等
+
+字數要求：正文約60–90字，加表格，總體不超過130字（嚴格控制，不可過長）
+重要：資料一的活動細項必須直接支援寫作任務一，讓考生有具體資料可引用
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+三、資料二設計（學生討論記錄形式）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+標題格式：「資料二：[學校名稱][討論平台名稱（學生網上論壇／群組對話／討論區）]（節錄）」
+
+內容必須包含：
+- 討論主題標題：「主題：你對「[計劃名稱]」有甚麼看法？」
+- 共4則留言，格式：[姓名（班別）] [時間 HH:MM] [留言內容]
+- 四則留言的意見分佈及對應關係（非常重要）：
+  • 第1則：針對資料一「活動一」提出疑慮（例如：擔心活動是否可行、對自己是否適合）
+  • 第2則：針對資料一「活動二」提出疑慮或另一項具體質疑
+  • 第3則：支持或認同計劃的整體意義（正面意見）
+  • 第4則：必須是題目中的寫作者本人，宣布將撰寫本次文章
+    例如：「我將在[下星期的早會時段／本期《XX通訊》]就這個計劃[介紹計劃的意義／提出我的看法]，並回應大家的意見。」
+
+【關鍵設計原則：資料一與資料二必須有對應關係】
+- 留言一的疑慮 → 對應資料一表格中活動一，考生可用活動一的具體細項來回應
+- 留言二的疑慮 → 對應資料一表格中活動二，考生可用活動二的具體細項來回應
+- 確保每則疑慮都能用資料一的具體活動內容加以回應和拓展
+- 這樣考生在正文一可以「引用活動一細項→回應留言一疑慮→深層拓展」
+  在正文二可以「引用活動二細項→回應留言二疑慮→深層拓展」
+
+字數要求：每則留言20–40字，總體約120–160字
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+五、評分參考生成要求（必須嚴格遵守）
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【資訊分（最高 2 分）】
+列出本題必須涵蓋的 3 項背景資訊（從題目和資料中提取），例如：活動名稱、計劃目的、寫作動機／身份、呼籲等。
+評分描述固定為：「以上 3 項資料齊全，給 2 分；只有以上 2 項資料，給 1 分；只有以上 1 項或沒有資料，給 0 分。」
+
+【內容發展分（最高 8 分）】
+直接生成評分描述表（把具體細項數量填入第一欄，不要在表格前另行列出，避免重複）：
+評分描述表格式如下，第一欄「齊全」後面括號內填入該題的具體細項數量（如：2項措施、4個措施細項、3項同學意見）：
+┌─────────────────┬───────────────────────────────────────┬──────┐
+│ 內容項目        │ 觀點、闡述                            │ 分數 │
+├─────────────────┼───────────────────────────────────────┼──────┤
+│ 齊全            │ 針對性回應；觀點明確、合理；理據充足，│7–8分 │
+│（全部細項）     │ 闡述周全。                            │      │
+│                 │ 一般回應；觀點大致明確合理；理據、    │5–6分 │
+│                 │ 闡述一般。                            │      │
+│                 │ 部分回應；觀點模糊／不合理。          │3–4分 │
+│                 │ 甚少回應／缺回應；觀點極不合理。      │1–2分 │
+├─────────────────┼───────────────────────────────────────┼──────┤
+│ 大致齊全        │ 針對性回應；觀點明確、合理；理據充足，│5–6分 │
+│（部分細項）     │ 闡述周全。                            │      │
+│                 │ 一般回應；觀點大致明確合理；理據、    │3–4分 │
+│                 │ 闡述一般。                            │      │
+│                 │ 甚少回應／缺回應；觀點極不合理。      │1–2分 │
+├─────────────────┼───────────────────────────────────────┼──────┤
+│ 少量、不齊全    │ 針對性回應；觀點明確、合理；理據充足，│3–4分 │
+│（極少細項）     │ 闡述清晰。                            │      │
+│                 │ 部分回應；觀點模糊／不合理。          │1–2分 │
+├─────────────────┼───────────────────────────────────────┼──────┤
+│ 欠缺            │ 甚少回應／缺回應；觀點闕如／極不合理。│ 0分  │
+└─────────────────┴───────────────────────────────────────┴──────┘
+
+【行文語氣（最高 10 分）】
+根據${genreLabel}調整「語氣效果」的描述：
+- 演講辭：「說明效果」（語氣親切、具感染力）
+- 書信／公開信：視乎題目類型，自薦信用「自薦效果」，公開信用「游說／呼籲效果」（語氣誠懇、有禮）
+- 建議書：「說服效果」（語氣客觀正式，建議具體可行）
+- 報告：「客觀匯報效果」（語氣正式客觀，資料呈現清晰，避免主觀情感語句）
+- 評論文章：「論證效果」（語氣客觀持平，立場清晰）
+- 專題文章：「說明效果」（語氣客觀、有說服力）
+
+生成四級評分描述（準確簡潔流暢，語氣切合 → 大致準確達意 → 未能達意 → 空白）
+
+【組織（最高 10 分）】
+根據${genreLabel}列出具體格式核對項目（checkbox形式），例如：
+- 書信：□ 欠／錯上款　□ 欠／錯署名　□ 欠／錯啟告語　□ 欠／錯日期
+- 演講辭：□ 欠稱謂　□ 欠自我介紹　□ 欠文末致謝
+- 建議書：□ 欠上款　□ 欠標題　□ 欠署名　□ 欠日期
+- 報告：□ 欠上款　□ 欠標題　□ 欠署名　□ 欠日期
+- 評論文章：□ 欠標題　□ 欠署名及身份
+- 專題文章：□ 欠標題　□ 欠署名及身份
+並說明：欠缺 1–2 項扣 1 分，3 項或以上扣 2 分；添加多餘格式扣 2 分
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+六、${genreLabel}格式要求
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+${genreFormatGuide}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+七、示範文章設計要求
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. 嚴格按以下段落結構撰寫，全文不得少於550字（標點符號計算在內），寧可略超600字也不可少於550字：
+   - 開首：約100字（交代身份、背景、計劃名稱及寫作目的，引入正文）
+   - 正文一：約230字，結構必須是：
+     ① 引用資料一「活動一」的名稱及具體細項（基本資訊）
+     ② 針對資料二「留言一」的疑慮，用活動一的細項加以回應
+     ③ 深層拓展：說明活動一對人的具體意義或效果（超出資料本身的引申），必須充分展開，至少3–4句
+     ④ 如資料二有支持意見（留言三），可在此自然引入強化論點（勿留待結尾才提）
+   - 正文二：約230字，結構必須是：
+     ① 引用資料一「活動二」的名稱及具體細項（基本資訊）
+     ② 針對資料二「留言二」的疑慮，用活動二的細項加以回應
+     ③ 深層拓展：說明活動二對人的具體意義或效果，必須充分展開，至少3–4句
+   - 結尾：約80字（總結計劃的整體意義，呼籲積極參與）
+
+   【正文結構關鍵原則】
+   - 資料一和資料二必須交織在同一段落中，而非分段處理
+   - 正文一和正文二各自圍繞「一項活動＋一則意見」展開
+   - 拓展部分必須超出資料所列的字面內容，說明活動如何具體影響人、改變人
+   - 正文中不應點名具體人物（如「陳小明同學認為……」），應以泛指代替（如「有同學擔心……」、「另有同學認為……」）
+   - 資料二的支持意見應在正文中自然融入（如「正如部分同學所言……」），而非只在結尾才提及
+
+2. 必須包含${genreLabel}所有必備格式元素
+3. 拓展闡述句子用【拓展】和【/拓展】純文字標記包住。拓展包含以下三個層次，均應標示：
+   層次一：引用資料細項並加以具體說明或延伸（超出資料原文的部分）
+   層次二：結合資料措施，針對資料二的疑慮提出具體解決方案
+   層次三：引申計劃的深層意義、對人的長遠影響或效果
+
+   【唯一不標示的情況】直接照抄資料原文，完全沒有任何發展或延伸
+
+   正確例子（應標示）：資料一提到「歷奇活動」設有攀石、繩網陣等挑戰。
+   →【拓展】教練會按照參加者的體能「因材施教」，安排合適的挑戰項目，讓每位同學都能在活動中有所得着，培養解難能力和克服困難的意志。【/拓展】
+
+   錯誤例子（不應標示）：「歷奇活動」設有攀石、繩網陣等挑戰，並有專業教練在場指導。
+   （直接照抄資料原文，沒有任何發展）
+
+   拓展內容必須根植於題目情境，符合計劃目的、文體及寫作身份，不可完全脫離資料憑空發揮。
+4. 示範文章只輸出純文字加上述【拓展】標記，不加任何 HTML 或 Markdown 格式`;
+
     const requestBody: any = {
       apiKey: config.apiKey,
       apiType: config.apiType,
@@ -460,6 +772,9 @@ export async function generatePracticalExamWithAPI  (
       baseURL: config.baseURL,
       fileType: fileType,
       genre: genre,
+      genreLabel: genreLabel,
+      systemPrompt: systemPrompt,
+      promptVersion: '2.0',
     };
 
     if (useInlineData) {
@@ -491,29 +806,90 @@ export async function generatePracticalExamWithAPI  (
       throw new Error(data.message || '生成失敗');
     }
 
-    return {
-      examPaper: data.examPaper || {
-        title: 'DSE 中文卷二甲部：實用寫作',
-        time: '45分鐘',
-        marks: '50分',
-        instructions: [],
-        question: '',
-        material1: { title: '', content: '' },
-        material2: { title: '', content: '' },
+    // Debug：記錄後端返回的 markingScheme 結構
+    console.log('[generatePracticalExam] raw markingScheme:', JSON.stringify(data.markingScheme, null, 2));
+
+    // 深層防護：確保所有巢狀欄位都有預設值，避免 undefined crash
+    const safeExamPaper = {
+      title: data.examPaper?.title || 'DSE 中文卷二甲部：實用寫作',
+      time: '45分鐘',  // 固定為45分鐘，不使用 AI 返回值
+      marks: '50分',  // 固定為50分，不使用 AI 返回值
+      instructions: Array.isArray(data.examPaper?.instructions) ? data.examPaper.instructions : [],
+      question: data.examPaper?.question || '',
+      material1: {
+        title: data.examPaper?.material1?.title || '材料一',
+        content: data.examPaper?.material1?.content || '',
       },
-      markingScheme: data.markingScheme || {
-              content: {
-        content: {
-          infoPoints: data.markingScheme?.content?.infoPoints || [],
-          developmentPoints: data.markingScheme?.content?.developmentPoints || []
-        },
-        organization: {
-          formatRequirements: data.markingScheme?.organization?.formatRequirements || [],
-          toneRequirements: data.markingScheme?.organization?.toneRequirements || []
-        }
-        }
-        }
-      };
+      material2: {
+        title: data.examPaper?.material2?.title || '材料二',
+        content: data.examPaper?.material2?.content || '',
+      },
+    };
+
+    // 後端真實結構：
+    // markingScheme.contentInfo.table = [{item, description}]
+    // markingScheme.contentDevelopment.table = [{item, description, score}]
+    // markingScheme.formatRequirements.table = [{item, requirement, score}]
+    const ms = data.markingScheme || {};
+
+    // 把後端的 table 陣列轉換成前端顯示用的字串陣列
+    const toInfoPoints = (table: any[]): string[] =>
+      Array.isArray(table) ? table.map(r => `${r.item}：${r.description || r.requirement || ''}`) : [];
+
+    // 內容發展：顯示具體細項（item + description），過濾掉 undefined
+    const toDevPoints = (table: any[]): string[] =>
+      Array.isArray(table)
+        ? table
+            .filter(r => r.item && r.item !== 'undefined' && r.description && r.description !== 'undefined')
+            .map(r => {
+              const score = r.score && r.score !== 'undefined' ? `【${r.score}】` : '';
+              return `${score}${r.item}：${r.description}`;
+            })
+        : [];
+
+    const toFormatPoints = (table: any[]): string[] =>
+      Array.isArray(table)
+        ? table
+            .filter(r => r.item && r.item !== 'undefined')
+            .map(r => `${r.item}：${r.requirement || r.description || ''}${r.score ? `（${r.score}）` : ''}`)
+        : [];
+
+    const safeMarkingScheme = {
+      content: {
+        infoPoints: toInfoPoints(
+          ms.contentInfo?.table ||
+          ms.content?.infoPoints ||
+          ms.infoPoints ||
+          []
+        ),
+        developmentPoints: toDevPoints(
+          ms.contentDevelopment?.table ||
+          ms.content?.developmentPoints ||
+          ms.developmentPoints ||
+          []
+        ),
+      },
+      organization: {
+        formatRequirements: toFormatPoints(
+          ms.formatRequirements?.table ||
+          ms.organization?.formatRequirements ||
+          ms.formatRequirements ||
+          []
+        ),
+        toneRequirements: toFormatPoints(
+          ms.toneRequirements?.table ||
+          ms.organization?.toneRequirements ||
+          ms.toneRequirements ||
+          []  // 後端暫不返回語氣要求，由 formatRequirements 統一顯示
+        ),
+      },
+    };
+
+    return {
+      examPaper: safeExamPaper,
+      markingScheme: safeMarkingScheme,
+      modelEssay: data.modelEssay || '',
+    };
   } catch (error: any) {
     console.error('Generate exam error:', error);
     

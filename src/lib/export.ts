@@ -34,7 +34,7 @@ export async function exportReportToWord(report: SecondaryReport, question: stri
   </style>
 </head>
 <body>
-  <h1>香港中學中文科命題寫作批改報告</h1>
+  <h1>中文科寫作批改報告</h1>
   
   <div class="info">
     <div class="info-row"><strong>學生姓名：</strong>${studentWork.name || '未命名'}</div>
@@ -160,7 +160,7 @@ export async function exportClassReportToWord(
   </style>
 </head>
 <body>
-  <h1>全班中文科命題寫作批改報告</h1>
+  <h1>全班中文科寫作批改報告</h1>
   <p><strong>題目：</strong>${question}</p>
   
   <h2>統計資料</h2>

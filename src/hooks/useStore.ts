@@ -13,7 +13,7 @@ import type {
   AppMode,
   GeneratedExam
 } from '@/types';
-import type { APIType } from '@/lib/api';
+import type { APIType, PracticalDevItems } from '@/lib/api';
 
 // 擴展文件信息
 export interface ExtendedFileInfo extends FileInfo {
@@ -42,6 +42,13 @@ interface AppState {
   
   // 實用寫作設定
   practicalGenre: string;
+
+  // 實用寫作評分準則確認結果
+  practicalInfoPoints: string[];        // 資訊分考核項目（老師確認後）
+  practicalDevItems: PracticalDevItems; // 內容發展細項數量
+  practicalFormatRequirements: string[]; // 格式核對項目
+  practicalCriteriaConfirmed: boolean;  // 老師是否已確認評分準則
+  practicalMaterials: string;           // 資料一＋資料二內容
   
   // 學生作品
   studentWorks: StudentWork[];
@@ -76,6 +83,12 @@ interface AppState {
   setContentPriority: (priority: boolean) => void;
   setEnhancementDirection: (direction: 'auto' | 'narrative' | 'argumentative') => void;
   setPracticalGenre: (genre: string) => void;
+  setPracticalInfoPoints: (points: string[]) => void;
+  setPracticalDevItems: (items: PracticalDevItems) => void;
+  setPracticalFormatRequirements: (reqs: string[]) => void;
+  setPracticalCriteriaConfirmed: (confirmed: boolean) => void;
+  setPracticalMaterials: (materials: string) => void;
+  resetPracticalCriteria: () => void;
   setCustomCriteria: (criteria: string) => void;
   addCustomCriteriaFile: (file: ExtendedFileInfo) => void;
   removeCustomCriteriaFile: (id: string) => void;
@@ -120,6 +133,11 @@ const initialState = {
   contentPriority: false,
   enhancementDirection: 'auto' as 'auto' | 'narrative' | 'argumentative',
   practicalGenre: 'speech',
+  practicalInfoPoints: [],
+  practicalDevItems: {},
+  practicalFormatRequirements: [],
+  practicalCriteriaConfirmed: false,
+  practicalMaterials: '',
   customCriteria: '',
   customCriteriaFiles: [],
   studentWorks: [],
@@ -153,6 +171,11 @@ export const useStore = create<AppState>()(
         uploadedFiles: [],
         customCriteriaFiles: [],
         customQuestion: '',
+        practicalInfoPoints: [],
+        practicalDevItems: {},
+        practicalFormatRequirements: [],
+        practicalCriteriaConfirmed: false,
+        practicalMaterials: '',
       }),
       
       setStep: (step) => set({ currentStep: step }),
@@ -172,6 +195,24 @@ export const useStore = create<AppState>()(
       setEnhancementDirection: (direction) => set({ enhancementDirection: direction }),
       
       setPracticalGenre: (genre) => set({ practicalGenre: genre }),
+
+      setPracticalInfoPoints: (points) => set({ practicalInfoPoints: points }),
+
+      setPracticalDevItems: (items) => set({ practicalDevItems: items }),
+
+      setPracticalFormatRequirements: (reqs) => set({ practicalFormatRequirements: reqs }),
+
+      setPracticalCriteriaConfirmed: (confirmed) => set({ practicalCriteriaConfirmed: confirmed }),
+
+      setPracticalMaterials: (materials) => set({ practicalMaterials: materials }),
+
+      resetPracticalCriteria: () => set({
+        practicalInfoPoints: [],
+        practicalDevItems: {},
+        practicalFormatRequirements: [],
+        practicalCriteriaConfirmed: false,
+        practicalMaterials: '',
+      }),
       
       setCustomCriteria: (criteria) => set({ customCriteria: criteria }),
       
@@ -329,6 +370,13 @@ export const useStore = create<AppState>()(
         contentPriority: state.contentPriority,
         enhancementDirection: state.enhancementDirection,
         appMode: state.appMode,
+        // 實用寫作批改設定持久化
+        practicalGenre: state.practicalGenre,
+        customQuestion: state.customQuestion,
+        practicalMaterials: state.practicalMaterials,
+        practicalInfoPoints: state.practicalInfoPoints,
+        practicalDevItems: state.practicalDevItems,
+        practicalCriteriaConfirmed: state.practicalCriteriaConfirmed,
       }),
     }
   )

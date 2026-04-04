@@ -177,7 +177,7 @@ export function Navigation() {
             <BookOpen className="w-5 h-5 text-white" />
           </div>
           <div className="hidden sm:block">
-            <h1 className="text-lg font-bold text-[#2D3748]">中文科寫作批改系統</h1>
+            <h1 className="text-lg font-bold text-[#2D3748]">中文科寫作批改及擬卷</h1>
             <p className="text-xs text-[#718096]">{currentMode.description}</p>
           </div>
           

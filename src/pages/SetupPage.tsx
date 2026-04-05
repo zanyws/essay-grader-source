@@ -84,13 +84,29 @@ export function SetupPage({ onNext }: SetupPageProps) {
       let imported = 0;
       for (const report of data.reports) {
         if (report.studentWork && report.grading) {
+          // 匯入報告
           addSecondaryReport(report);
+          // 同時重建 studentWork（讓校對和批改頁面能顯示原文）
+          if (report.studentWork.originalText || report.studentWork.correctedText) {
+            addStudentWork({
+              id: report.studentWork.id,
+              name: report.studentWork.name || '未命名',
+              studentId: report.studentWork.studentId || '',
+              originalText: report.studentWork.originalText || report.studentWork.correctedText || '',
+              correctedText: report.studentWork.correctedText || report.studentWork.originalText || '',
+              fileName: report.studentWork.fileName,
+            });
+          }
           imported++;
         }
       }
-      setSuccess(`已成功匯入 ${imported} 篇批改記錄！`);
-      setTimeout(() => setSuccess(null), 4000);
-      if (data.question) setCustomQuestion(data.question);
+      setCurrentWorkIndex(0);
+      setSuccess(`已成功匯入 ${imported} 篇批改記錄！校對及批改頁面已可查看。`);
+      setTimeout(() => setSuccess(null), 5000);
+      if (data.question) {
+        setCustomQuestion(data.question);
+        setUseCustomQuestion(true);
+      }
     } catch {
       setError('讀取文件失敗，請確認是有效的批改記錄JSON文件');
     }

@@ -318,10 +318,33 @@ function safeJSONParse(text, context = '') {
         }
       }
       
-      // 4. 嘗試修復常見問題：去除尾部逗號
+      // 4. 修復截斷的 JSON（Unexpected end of JSON input）
+      // 找到最後一個完整的 } 或 ] 並截斷
+      let truncated = cleaned;
+      
+      // 嘗試逐步縮短找到可解析的 JSON
+      const truncateAttempts = [
+        cleaned,
+        cleaned + '"}}}',      // 補全常見截斷：字串+三個花括號
+        cleaned + '"}}',
+        cleaned + '"}',
+        cleaned + '}',
+      ];
+      
+      for (const attempt of truncateAttempts) {
+        try {
+          // 先修復尾部逗號再嘗試解析
+          const fixed = attempt.replace(/,\s*([}\]])/g, '$1');
+          const parsed = JSON.parse(fixed);
+          console.log('Recovered truncated JSON with attempt:', attempt.slice(-20));
+          return parsed;
+        } catch {}
+      }
+      
+      // 5. 嘗試修復常見問題：去除尾部逗號
       cleaned = cleaned.replace(/,\s*([}\]])/g, '$1');
       
-      // 5. 嘗試修復未閉合的字符串
+      // 6. 嘗試修復未閉合的字符串
       const openQuotes = (cleaned.match(/"/g) || []).length;
       if (openQuotes % 2 !== 0) {
         cleaned += '"';
@@ -330,7 +353,7 @@ function safeJSONParse(text, context = '') {
       try {
         return JSON.parse(cleaned);
       } catch (e3) {
-        throw new Error(`無法解析 JSON: ${text.substring(0, 100)}...`);
+        throw new Error(`無法解析 JSON (Unexpected end): ${text.substring(0, 100)}...`);
       }
     }
   } catch (error) {
@@ -2184,24 +2207,29 @@ ${contentPriorityInstruction}
 二、表達（30分）— 品第制1-10分
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+【重要前提：評分豁免規則】
+1. 簡體字與繁體字均接受，不視為語病或錯別字，不扣分
+2. OCR識別錯誤（如形近字、同音字被錯誤辨認）不計入語病，評分時應以合理推斷學生原意為準
+3. 一般考生（能寫出通順句子）的正常水平對應5分
+
 【評分邏輯：先看句子通順程度，再看寫作手法運用】
 
 ▌第一步：判斷句子通順程度（決定基礎分）
 
-- 句子整體通順，偶有沙石但不影響理解 → 基礎分5分
+- 句子整體通順，偶有沙石但不影響理解 → 基礎分5分（一般考生正常水平）
 - 句子多處不通順，語病明顯影響閱讀 → 給4分
-- 句子嚴重不通順，語病頻密，句子成分殘缺，或多處錯別字 → 給3分或以下
+- 句子嚴重不通順，語病頻密，句子成分殘缺 → 給3分或以下
 
 ▌第二步：在通順基礎上，按寫作手法往上加分
 
-- 5分（中中下）：句子尚算通順，惟有明顯語病；用詞平淡，欠缺寫作手法
+- 5分（中中下）：句子尚算通順，惟有明顯語病；用詞平淡，欠缺寫作手法（此為一般考生基準）
 - 6分（中中上）：句子大致通順，用詞大致準確；偶有寫作手法（如比喻、排比），惟運用一般
 - 7分（中上）：句子通順，偶有瑕疵；用詞準確，寫作手法運用尚算靈活，能配合選材
 - 8分（上下）：句子簡潔流暢；用詞精確豐富，寫作手法運用靈活，能有效配合選材
 - 9分（上中）：句子極流暢；用詞極精確豐富，手法純熟，選材與手法配合緊密
 - 10分（上上）：文句極簡潔流暢；詞藻優美，句式多變，手法純熟靈活，整體表達達到極高水平
 
-▌語言嚴重失誤（3分或以下）：
+▌語言嚴重失誤（4分或以下）：
 
 - 4分（中下）：句子多處不通順，失誤頻密，用詞粗疏，表達薄弱
 - 3分（下上）：句子欠通順，用詞不準，表達混亂
@@ -2309,7 +2337,7 @@ ${enhancementInstruction}
     "improvements": ["具體指出標點失誤位置及類型"]
   },
   "enhancedText": "增潤後的完整文章，保留學生原意，修正語病，提升表達，避免AI堆砌感",
-  "enhancementNotes": ["具體說明修改了什麼：原句→修改後句子"],
+  "enhancementNotes": ["只列修改類別，每項5字內，如：修正語病、豐富詞彙、調整句式、加強描寫、深化立意、刪除冗詞，最多5項，不需列出具體句子"],
   "modelEssay": "上上品示範文章，不少於1500字，按開頭/中段/結尾結構，扣緊題目關鍵元素，立意深刻，語言優美"
 }`;
 }

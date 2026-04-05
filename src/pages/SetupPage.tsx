@@ -187,7 +187,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
       }
       clearUploadedFiles();
       setCurrentWorkIndex(0);
-      if (autoGrade) { setStep(2); } else { setStep(1); onNext(); }
+      if (autoGrade) { setCurrentWorkIndex(0); setStep(2); } else { setStep(1); onNext(); }
     } catch (error: any) {
       setError(error.message || '處理過程中發生錯誤，請重試');
     } finally {
@@ -198,8 +198,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
   const canProceed = (selectedQuestion || customQuestion.trim()) && (uploadedFiles.length > 0 || manualText.trim() || studentWorks.length > 0);
 
   const handleContinueProcessing = () => {
-    if (autoGrade) { setStep(2); } else { setStep(1); }
-    onNext();
+    if (autoGrade) { setCurrentWorkIndex(0); setStep(2); } else { setStep(1); onNext(); }
   };
 
   const enhancementOptions = [

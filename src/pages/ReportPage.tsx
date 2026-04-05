@@ -78,6 +78,9 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
 
   // 用 ref 追蹤目前正在批改的 workId，避免 useEffect 重複觸發
   const generatingForId = useRef<string | null>(null);
+  // 用 ref 追蹤最新的 currentWorkIndex（避免 autoGrade 的 closure stale 問題）
+  const currentWorkIndexRef = useRef(currentWorkIndex);
+  currentWorkIndexRef.current = currentWorkIndex;
 
 
   const question = useCustomQuestion ? customQuestion : selectedQuestion?.title || '';
@@ -151,12 +154,16 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
 
       // 自動逐篇批改：批改完成後自動切換到下一篇（若有下一篇且尚未批改）
       if (autoGrade) {
-        const nextIndex = currentWorkIndex + 1;
-        if (nextIndex < studentWorks.length) {
-          const nextWork = studentWorks[nextIndex];
-          // 用最新的 store state 檢查是否已有報告
+        // 用 ref 取最新的 currentWorkIndex，避免 stale closure
+        const latestIndex = currentWorkIndexRef.current;
+        const nextIndex = latestIndex + 1;
+        const allWorks = useStore.getState().studentWorks;
+        if (nextIndex < allWorks.length) {
+          const nextWork = allWorks[nextIndex];
           const currentReports = useStore.getState().secondaryReports;
-          const alreadyHasReport = currentReports.some(r => r.studentWork.id === nextWork.id);
+          const alreadyHasReport = currentReports.some(
+            r => r.studentWork.id === nextWork.id || r.studentWork.name === nextWork.name
+          );
           if (!alreadyHasReport) {
             setTimeout(() => setCurrentWorkIndex(nextIndex), 800);
           }

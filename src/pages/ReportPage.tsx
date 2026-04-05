@@ -78,26 +78,12 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
 
   // 用 ref 追蹤目前正在批改的 workId，避免 useEffect 重複觸發
   const generatingForId = useRef<string | null>(null);
-  // 追蹤是否為第一次進入批改頁
-  const isFirstMount = useRef(true);
+
 
   const question = useCustomQuestion ? customQuestion : selectedQuestion?.title || '';
   const currentWork = studentWorks[currentWorkIndex];
 
   useEffect(() => {
-    // 首次進入批改頁：重置到第一篇尚未批改的文章
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      // 找第一篇沒有報告的文章
-      const firstUngraded = studentWorks.findIndex(w =>
-        !secondaryReports.some(r => r.studentWork.id === w.id || r.studentWork.name === w.name)
-      );
-      if (firstUngraded > 0 && firstUngraded !== currentWorkIndex) {
-        setCurrentWorkIndex(0); // 從第一篇開始
-        return;
-      }
-    }
-
     if (!currentWork) return;
 
     // 已有報告，直接顯示（去重：只取最新一份）

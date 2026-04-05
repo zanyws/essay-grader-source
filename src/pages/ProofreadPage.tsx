@@ -108,8 +108,9 @@ export function ProofreadPage({ onNext, onPrev }: ProofreadPageProps) {
 
   const handleStartGrading = () => {
     handleSave();
+    // 重置到第一篇，確保批改從第一篇開始
+    setCurrentWorkIndex(0);
     setStep(2);
-    onNext();
   };
 
   const handleSkip = () => {

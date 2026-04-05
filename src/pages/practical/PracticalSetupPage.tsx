@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Upload, FileText, X, AlertCircle, Check, FileEdit, Wand2 } from 'lucide-react';
+import { ChevronRight, Upload, FileText, X, AlertCircle, Check, FileEdit, Wand2, Download, FolderOpen, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -40,7 +40,11 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     setPracticalInfoPoints, setPracticalDevItems, setPracticalFormatRequirements,
     setPracticalCriteriaConfirmed, setPracticalMaterials, resetPracticalCriteria,
     setCurrentWorkIndex, setStep,
+    practicalReports,
+    addPracticalReport,
   } = useStore();
+
+  const accumulatedCount = practicalReports.length;
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isExtractingQuestion, setIsExtractingQuestion] = useState(false);
@@ -64,6 +68,36 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
 
   const studentFileInputRef = useRef<HTMLInputElement>(null);
   const questionFileInputRef = useRef<HTMLInputElement>(null);
+
+  // ══ 匯出批改記錄 ══
+  const handleExportRecords = () => {
+    if (practicalReports.length === 0) return;
+    const exportData = { version: '1.0', exportDate: new Date().toISOString(), appMode: 'practical', question: customQuestion, reports: practicalReports };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `實用批改記錄_${new Date().toLocaleDateString('zh-HK').replace(/\//g, '-')}.json`;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+  };
+
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const handleImportRecords = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.reports || !Array.isArray(data.reports)) { setError('無效的批改記錄文件'); return; }
+      let imported = 0;
+      for (const report of data.reports) {
+        if (report.studentWork && report.grading) { addPracticalReport(report); imported++; }
+      }
+      setSuccess(`已成功匯入 ${imported} 篇批改記錄！`);
+      setTimeout(() => setSuccess(null), 4000);
+      if (data.question) setCustomQuestion(data.question);
+    } catch { setError('讀取文件失敗，請確認是有效的批改記錄JSON文件'); }
+    if (importInputRef.current) importInputRef.current.value = '';
+  };
 
   const handleStudentFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -501,6 +535,35 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
               <p className="text-xs text-amber-700">請在上方確認評分準則後才能開始批改</p>
             </div>
           )}
+
+          
+          {/* 已累積報告橫幅 */}
+          {accumulatedCount > 0 && (
+            <div className="p-3 bg-red-50 border border-[#B5726E] rounded-lg">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Layers className="w-4 h-4 text-[#B5726E] flex-shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#B5726E]">已累積 {accumulatedCount} 篇批改報告</p>
+                    <p className="text-xs text-[#718096]">上傳下一批後繼續累積</p>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="border-[#B5726E] text-[#B5726E] hover:bg-red-50 gap-1 flex-shrink-0"
+                  onClick={handleExportRecords}>
+                  <Download className="w-3 h-3" />匯出記錄
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* 匯入批改記錄 */}
+          <div className="w-full">
+            <input ref={importInputRef} type="file" accept=".json" className="hidden" onChange={handleImportRecords} />
+            <Button variant="outline" onClick={() => importInputRef.current?.click()}
+              className="w-full gap-2 text-[#718096]" size="sm">
+              <FolderOpen className="w-4 h-4" />匯入上次批改記錄（.json）
+            </Button>
+          </div>
 
           <Button onClick={handleStartProcessing} disabled={!canProceed || isProcessing} className="w-full gap-2 bg-[#B5726E] hover:bg-[#a5625e]" size="lg">
             {isProcessing ? <><div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />處理中...</> : <>開始處理<ChevronRight className="w-5 h-5" /></>}

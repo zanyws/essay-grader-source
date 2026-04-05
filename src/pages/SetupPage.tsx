@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Type, Sparkles, Settings2, Upload, FileText, X, AlertCircle, Check, Layers } from 'lucide-react';
+import { ChevronRight, Type, Sparkles, Settings2, Upload, FileText, X, AlertCircle, Check, Layers, Download, FolderOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,6 +30,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
     setAutoGrade, setIgnoreRedInk, setContentPriority, setEnhancementDirection,
     setCustomCriteria, addStudentWork, addUploadedFile, removeUploadedFile,
     clearUploadedFiles, setCurrentWorkIndex, setStep,
+    secondaryReports, addSecondaryReport,
   } = useStore();
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -49,6 +50,53 @@ export function SetupPage({ onNext }: SetupPageProps) {
     appMode === 'primary' ? primaryReports.length :
     appMode === 'practical' ? practicalReports.length :
     secondaryReports.length;
+
+  // ══ 匯出批改記錄 ══
+  const handleExportRecords = () => {
+    if (secondaryReports.length === 0) return;
+    const exportData = {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      appMode,
+      question: useCustomQuestion ? customQuestion : selectedQuestion?.title || '',
+      reports: secondaryReports,
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `批改記錄_${new Date().toLocaleDateString('zh-HK').replace(/\//g, '-')}.json`;
+    document.body.appendChild(link); link.click();
+    document.body.removeChild(link); URL.revokeObjectURL(url);
+  };
+
+  // ══ 匯入批改記錄 ══
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const handleImportRecords = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!data.reports || !Array.isArray(data.reports)) {
+        setError('無效的批改記錄文件');
+        return;
+      }
+      let imported = 0;
+      for (const report of data.reports) {
+        if (report.studentWork && report.grading) {
+          addSecondaryReport(report);
+          imported++;
+        }
+      }
+      setSuccess(`已成功匯入 ${imported} 篇批改記錄！`);
+      setTimeout(() => setSuccess(null), 4000);
+      if (data.question) setCustomQuestion(data.question);
+    } catch {
+      setError('讀取文件失敗，請確認是有效的批改記錄JSON文件');
+    }
+    if (importInputRef.current) importInputRef.current.value = '';
+  };
 
   const handleStudentFilesChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -162,9 +210,24 @@ export function SetupPage({ onNext }: SetupPageProps) {
               <p className="text-xs text-[#718096]">上傳下一批作文後，報告將繼續累積。完成全班後可查看全班報告。</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" className="border-[#4A6FA5] text-[#4A6FA5] flex-shrink-0 hover:bg-blue-50" onClick={() => { setStep(3); onNext(); }}>
-            查看全班報告
-          </Button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="outline" size="sm"
+              className="border-[#4A6FA5] text-[#4A6FA5] hover:bg-blue-50 gap-1"
+              onClick={handleExportRecords}
+              title="匯出批改記錄為JSON文件，以便下次匯入"
+            >
+              <Download className="w-3 h-3" />
+              匯出記錄
+            </Button>
+            <Button
+              variant="outline" size="sm"
+              className="border-[#4A6FA5] text-[#4A6FA5] hover:bg-blue-50"
+              onClick={() => { setStep(3); onNext(); }}
+            >
+              查看全班報告
+            </Button>
+          </div>
         </div>
       )}
 
@@ -324,6 +387,26 @@ export function SetupPage({ onNext }: SetupPageProps) {
               />
             </CardContent>
           </Card>
+
+          {/* 匯入批改記錄 */}
+          <div className="w-full">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleImportRecords}
+            />
+            <Button
+              variant="outline"
+              onClick={() => importInputRef.current?.click()}
+              className="w-full gap-2 text-[#718096]"
+              size="sm"
+            >
+              <FolderOpen className="w-4 h-4" />
+              匯入上次批改記錄（.json）
+            </Button>
+          </div>
 
           <Button
             onClick={studentWorks.length > 0 ? handleContinueProcessing : handleStartProcessing}

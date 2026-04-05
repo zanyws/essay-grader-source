@@ -84,21 +84,26 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
   useEffect(() => {
     if (!currentWork) return;
 
-    // 已有報告，直接顯示
-    const existingReport = secondaryReports.find(r => r.studentWork.id === currentWork.id);
-    if (existingReport) {
-      setCurrentReport(existingReport);
+    // 已有報告，直接顯示（去重：只取最新一份）
+    const existingReports = secondaryReports.filter(r => r.studentWork.id === currentWork.id);
+    if (existingReports.length > 0) {
+      const latestReport = existingReports[existingReports.length - 1];
+      setCurrentReport(latestReport);
       setGradingChanged(false);
       return;
     }
 
-    // 避免對同一篇文章重複觸發生成
+    // 避免對同一篇文章重複觸發生成（但初始載入時需要清除ref）
     if (generatingForId.current === currentWork.id) return;
+
+    // 確保初始載入時 ref 是乾淨的
+    if (generatingForId.current !== null && generatingForId.current !== currentWork.id) {
+      generatingForId.current = null;
+    }
 
     generateReportForWork(currentWork);
   }, [currentWorkIndex, currentWork?.id]);
   // 注意：依賴只用 currentWorkIndex 和 currentWork.id，不依賴 secondaryReports
-  // 避免 addSecondaryReport 後再次觸發 useEffect
 
   const generateReportForWork = async (work: typeof currentWork) => {
     if (!work) return;

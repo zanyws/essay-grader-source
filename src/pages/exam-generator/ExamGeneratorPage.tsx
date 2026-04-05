@@ -217,11 +217,36 @@ export function ExamGeneratorPage() {
     const toList = (arr: string[]) => arr.length > 0 ? arr.map(i => `<li>${i}</li>`).join('\n ') : '<li>（未有資料）</li>';
     const modelEssayHtml = generatedExam.modelEssay ? parseEssayToHtml(generatedExam.modelEssay) : '';
 
-    // 內容發展分：按新格式顯示（優質回應應涵蓋...）
+    // 內容發展分：左欄細項 + 右欄評分準則表格
+    const cleanPoint = (p: string) => p.replace(/^【\d+分】\s*/, '').replace(/^\d+分[:：]\s*/, '');
     const devPointsHtml = developmentPoints.length > 0
-      ? `<p class="score-note">優質回應應涵蓋以下論點及拓展方向：</p>
-         <ul>${toList(developmentPoints)}</ul>
-         <p class="score-note" style="margin-top:8px">評分準則：7–8分（齊全；合理、扣題、具體拓展；解說清晰）、5–6分（齊全；合理、具體拓展）、3–4分（大致齊全；拓展欠具體）、1–2分（不齊全）、0分（欠缺）</p>`
+      ? `<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:13px">
+          <thead>
+            <tr>
+              <th style="background:#f5f0e8;padding:6px 10px;border:1px solid #d4c5a0;text-align:left;font-weight:600">優質回應應涵蓋以下論點及拓展方向</th>
+              <th style="background:#f5f0e8;padding:6px 10px;border:1px solid #d4c5a0;text-align:center;font-weight:600;width:160px">評分準則</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:8px 10px;border:1px solid #d4c5a0;vertical-align:top">
+                <ul style="margin:0;padding-left:16px">${developmentPoints.map((p: string) => `<li style="margin:3px 0">${cleanPoint(p)}</li>`).join('')}</ul>
+              </td>
+              <td style="padding:0;border:1px solid #d4c5a0;vertical-align:top">
+                <table style="width:100%;border-collapse:collapse;font-size:12px">
+                  ${[
+                    ['7–8分','齊全；合理、扣題、具體拓展；解說清晰，論點有力'],
+                    ['5–6分','齊全；合理、具體拓展；解說尚算清晰'],
+                    ['3–4分','大致齊全；拓展欠具體，或拓展欠扣題'],
+                    ['2分','齊全；拓展欠奉，或觀點不合理'],
+                    ['1分','不齊全；拓展欠奉'],
+                    ['0分','欠缺'],
+                  ].map(([score, desc]) => `<tr><td style="padding:4px 6px;border-bottom:1px solid #e8dcc8;font-weight:600;color:#7a5f00;white-space:nowrap">${score}</td><td style="padding:4px 6px;border-bottom:1px solid #e8dcc8;color:#555;font-size:11px">${desc}</td></tr>`).join('')}
+                </table>
+              </td>
+            </tr>
+          </tbody>
+        </table>`
       : '<p>（未有資料）</p>';
 
     const htmlContent = `<!DOCTYPE html>
@@ -433,16 +458,40 @@ h2{font-size:17px;margin-top:32px;margin-bottom:12px;border-bottom:2px solid #B5
                   )}
                   {getDevelopmentPoints().length > 0 && (
                     <div>
-                      <p className="font-medium mb-1">內容發展 <span className="text-xs text-[#718096] font-normal">（最高8分）</span></p>
-                      <p className="text-xs text-[#718096] mb-2">優質回應應涵蓋以下論點及拓展方向：</p>
-                      <ul className="text-sm list-disc list-inside space-y-1 text-[#718096]">{getDevelopmentPoints().map((p: string, idx: number) => <li key={idx}>{p}</li>)}</ul>
-                      <div className="mt-3 p-3 bg-amber-50 rounded-lg text-xs text-amber-800 space-y-1">
-                        <p className="font-medium">評分準則：</p>
-                        <p>• <strong>7–8分</strong>：齊全；合理、扣題、具體拓展；解說清晰，論點有力</p>
-                        <p>• <strong>5–6分</strong>：齊全；合理、具體拓展；解說尚算清晰</p>
-                        <p>• <strong>3–4分</strong>：大致齊全；有拓展但不夠具體，或拓展欠扣題</p>
-                        <p>• <strong>1–2分</strong>：不齊全；拓展欠奉，或觀點不合理</p>
-                        <p>• <strong>0分</strong>：欠缺</p>
+                      <p className="font-medium mb-2">內容發展 <span className="text-xs text-[#718096] font-normal">（最高8分）</span></p>
+                      {/* 左右兩欄表格：左欄細項，右欄評分準則 */}
+                      <div className="border border-[#E2E8F0] rounded-lg overflow-hidden text-xs">
+                        <div className="grid grid-cols-[1fr_auto] bg-[#F7F9FB]">
+                          <div className="px-3 py-2 font-medium text-[#2D3748] border-r border-[#E2E8F0]">優質回應應涵蓋以下論點及拓展方向</div>
+                          <div className="px-3 py-2 font-medium text-[#2D3748] w-36 text-center">評分準則</div>
+                        </div>
+                        <div className="grid grid-cols-[1fr_auto]">
+                          {/* 左欄：具體細項 */}
+                          <div className="border-r border-[#E2E8F0] divide-y divide-[#E2E8F0]">
+                            {getDevelopmentPoints().map((p: string, idx: number) => (
+                              <div key={idx} className="px-3 py-2 text-[#2D3748]">
+                                {/* 清除可能殘留的【X分】前綴 */}
+                                {p.replace(/^【\d+分】\s*/, '').replace(/^\d+分[:：]\s*/, '')}
+                              </div>
+                            ))}
+                          </div>
+                          {/* 右欄：評分準則（合併成一欄） */}
+                          <div className="w-36 divide-y divide-[#E2E8F0]">
+                            {[
+                              { score: '7–8分', desc: '齊全；合理、扣題、具體拓展；解說清晰' },
+                              { score: '5–6分', desc: '齊全；合理、具體拓展；解說尚算清晰' },
+                              { score: '3–4分', desc: '大致齊全；拓展欠具體或欠扣題' },
+                              { score: '2分', desc: '齊全；拓展欠奉，或觀點不合理' },
+                              { score: '1分', desc: '不齊全；拓展欠奉' },
+                              { score: '0分', desc: '欠缺' },
+                            ].map(({ score, desc }) => (
+                              <div key={score} className="px-2 py-1.5 text-center">
+                                <span className="font-medium text-[#4A6FA5] block">{score}</span>
+                                <span className="text-[10px] text-[#718096] leading-tight block">{desc}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

@@ -39,6 +39,7 @@ export function Navigation() {
     resetAll, resetForNextBatch,
     currentStep, setStep,
     secondaryReports, primaryReports, practicalReports,
+    studentWorks,
   } = useStore();
 
   const [localKey, setLocalKey] = useState(apiKey);
@@ -154,6 +155,43 @@ export function Navigation() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* 步驟導航（中間，只在有內容時顯示） */}
+        {(appMode === 'secondary' || appMode === 'primary') && (
+          <div className="hidden md:flex items-center gap-1">
+            {[
+              { step: 0, label: '設定' },
+              { step: 1, label: '校對' },
+              { step: 2, label: '批改' },
+              { step: 3, label: '全班' },
+            ].map(({ step, label }) => {
+              const isActive = currentStep === step;
+              // 判斷能否跳到此步驟
+              const canGo =
+                step === 0 ? true :
+                step === 1 ? studentWorks.length > 0 :
+                step === 2 ? studentWorks.length > 0 :
+                step === 3 ? accumulatedCount > 0 : false;
+              return (
+                <button
+                  key={step}
+                  disabled={!canGo}
+                  onClick={() => canGo && setStep(step)}
+                  className={[
+                    'px-3 py-1 rounded text-xs font-medium transition-colors',
+                    isActive
+                      ? 'bg-[#4A6FA5] text-white'
+                      : canGo
+                      ? 'text-[#718096] hover:bg-[#F7F9FB] hover:text-[#4A6FA5]'
+                      : 'text-[#CBD5E0] cursor-not-allowed',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Right Actions */}
         <div className="flex items-center gap-2">

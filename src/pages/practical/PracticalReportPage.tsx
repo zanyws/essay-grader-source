@@ -270,6 +270,18 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
        <div class="improvements"><b>改善：</b><ul>${fb.improvements.map((s: string) => `<li>${cleanText(s)}</li>`).join('')}</ul></div>`
     ).join('');
 
+    // 增潤文章和示範文章（處理拓展標記）
+    const processExpand = (t: string) => t
+      .replace(/【拓展】?/g, '<strong style="color:#2563eb;font-weight:700">')
+      .replace(/【\/拓展】/g, '</strong>')
+      .replace(/\[拓展\]/g, '<strong style="color:#2563eb;font-weight:700">')
+      .replace(/\[\/拓展\]/g, '</strong>');
+    const essayToHtml = (text: string) => text.split('\n').map(line => {
+      const t = line.trim();
+      if (!t) return '<div style="margin:0.6em 0"></div>';
+      return `<div style="margin:0.2em 0">${processExpand(t)}</div>`;
+    }).join('');
+
     const html = `<!DOCTYPE html>
 <html lang="zh-HK"><head><meta charset="UTF-8">
 <title>實用寫作批改報告 - ${currentWork.name || '未命名'}</title>
@@ -300,11 +312,11 @@ ${formatChecksHtml}
 ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;padding:15px;border-radius:8px;border-left:4px solid #E8A838"><h3 style="color:#B5726E;margin-top:0">格式問題</h3><ul>${currentReport.formatIssues.map((i: string) => `<li>${cleanText(i)}</li>`).join('')}</ul></div>` : ''}
 <h2>各項評語</h2>${feedbackSections}
 <h2>增潤文章</h2>
-<p style="font-size:13px;color:#4a6fa5">藍色粗體部分為內容拓展示範。</p>
-<div class="essay-box" style="white-space:normal;line-height:2">${parseEssayToHtml(currentReport.enhancedText)}</div>
+<p style="font-size:13px;color:#4a6fa5;margin-bottom:8px">藍色粗體部分為內容拓展示範，供學生參考。</p>
+<div class="essay-box" style="white-space:normal;line-height:2">${essayToHtml(currentReport.enhancedText)}</div>
 <h2>示範文章</h2>
-<p style="font-size:13px;color:#4a6fa5">藍色粗體部分為內容拓展示範。</p>
-<div class="essay-box" style="white-space:normal;line-height:2">${parseEssayToHtml(currentReport.modelEssay)}</div>
+<p style="font-size:13px;color:#4a6fa5;margin-bottom:8px">藍色粗體部分為內容拓展示範，供學生參考。</p>
+<div class="essay-box" style="white-space:normal;line-height:2">${essayToHtml(currentReport.modelEssay)}</div>
 </body></html>`;
 
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });

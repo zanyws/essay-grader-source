@@ -222,7 +222,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
             <Button
               variant="outline" size="sm"
               className="border-[#4A6FA5] text-[#4A6FA5] hover:bg-blue-50"
-              onClick={() => { setStep(3); onNext(); }}
+              onClick={() => setStep(3)}
             >
               查看全班報告
             </Button>

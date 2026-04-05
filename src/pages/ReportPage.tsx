@@ -62,6 +62,7 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
     updateSecondaryReportGrading,
     contentPriority,
     enhancementDirection,
+    autoGrade,
     setCurrentWorkIndex,
     setStep,
     resetForNextBatch,
@@ -85,7 +86,13 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
     if (!currentWork) return;
 
     // 已有報告，直接顯示（去重：只取最新一份）
-    const existingReports = secondaryReports.filter(r => r.studentWork.id === currentWork.id);
+    // 先按 id 精確匹配，再按姓名模糊匹配（用於匯入記錄後的情況）
+    let existingReports = secondaryReports.filter(r => r.studentWork.id === currentWork.id);
+    if (existingReports.length === 0 && currentWork.name) {
+      existingReports = secondaryReports.filter(r =>
+        r.studentWork.name === currentWork.name || r.studentWork.studentId === currentWork.studentId
+      );
+    }
     if (existingReports.length > 0) {
       const latestReport = existingReports[existingReports.length - 1];
       setCurrentReport(latestReport);
@@ -140,6 +147,20 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
     } finally {
       setIsGenerating(false);
       generatingForId.current = null;
+
+      // 自動逐篇批改：批改完成後自動切換到下一篇（若有下一篇且尚未批改）
+      if (autoGrade) {
+        const nextIndex = currentWorkIndex + 1;
+        if (nextIndex < studentWorks.length) {
+          const nextWork = studentWorks[nextIndex];
+          // 用最新的 store state 檢查是否已有報告
+          const currentReports = useStore.getState().secondaryReports;
+          const alreadyHasReport = currentReports.some(r => r.studentWork.id === nextWork.id);
+          if (!alreadyHasReport) {
+            setTimeout(() => setCurrentWorkIndex(nextIndex), 800);
+          }
+        }
+      }
     }
   };
 

@@ -16,14 +16,21 @@ import type { FileInfo } from '@/types';
 interface ExtendedFileInfo extends FileInfo { file?: File; }
 
 export function ExamGeneratorPage() {
-  const { apiKey, apiType, apiModel, apiBaseURL, generatedExam, setGeneratedExam } = useStore();
+  const { apiKey, apiType, apiModel, apiBaseURL, generatedExam, setGeneratedExam, customQuestion: storedQuestion, practicalMaterials: storedMaterials } = useStore();
   const [genre, setGenre] = useState('speech');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [uploadedFile, setUploadedFile] = useState<ExtendedFileInfo | null>(null);
-  const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
-  const [pastedQuestion, setPastedQuestion] = useState('');
+  // 若有從實用寫作批改頁帶來的題目資料，預設切換到貼上模式
+  const [inputMode, setInputMode] = useState<'upload' | 'paste'>(storedQuestion ? 'paste' : 'upload');
+  // 預填從實用寫作批改頁帶來的題目（含資料內容）
+  const prefilledContent = storedQuestion
+    ? storedMaterials
+      ? `${storedQuestion}\n\n${storedMaterials}`
+      : storedQuestion
+    : '';
+  const [pastedQuestion, setPastedQuestion] = useState(prefilledContent);
   const [pastedCriteria, setPastedCriteria] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -387,6 +394,11 @@ h2{font-size:17px;margin-top:32px;margin-bottom:12px;border-bottom:2px solid #B5
               <TabsContent value="paste" className="space-y-4 pt-2">
                 <div className="space-y-2">
                   <Label className="flex items-center gap-2"><Type className="w-4 h-4" />貼上題目</Label>
+                    {storedQuestion && (
+                      <p className="text-xs text-[#4A6FA5] bg-blue-50 p-2 rounded mb-1">
+                        已自動填入實用寫作批改頁的題目及資料內容
+                      </p>
+                    )}
                   <Textarea placeholder="請貼上題目內容..." value={pastedQuestion} onChange={(e) => setPastedQuestion(e.target.value)} className="min-h-[120px]" />
                 </div>
                 <div className="space-y-2">

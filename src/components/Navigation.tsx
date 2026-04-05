@@ -160,7 +160,7 @@ export function Navigation() {
         {(appMode === 'secondary' || appMode === 'primary' || appMode === 'practical') && (
           <div className="hidden md:flex items-center gap-1">
             {(appMode === 'practical'
-              ? [{ step: 0, label: '設定' }, { step: 2, label: '批改' }, { step: 3, label: '全班' }]
+              ? [{ step: 0, label: '設定' }, { step: 1, label: '校對' }, { step: 2, label: '批改' }, { step: 3, label: '全班' }]
               : [{ step: 0, label: '設定' }, { step: 1, label: '校對' }, { step: 2, label: '批改' }, { step: 3, label: '全班' }]
             ).map(({ step, label }) => {
               const isActive = currentStep === step;

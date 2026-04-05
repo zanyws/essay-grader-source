@@ -122,7 +122,7 @@ export const useStore = create<AppState>()(
     (set, get) => ({
       ...initialState,
 
-      setAppMode: (mode) => set({
+      setAppMode: (mode) => set((state) => ({
         appMode: mode,
         currentStep: 0,
         studentWorks: [],
@@ -133,13 +133,14 @@ export const useStore = create<AppState>()(
         skippedWorks: [],
         uploadedFiles: [],
         customCriteriaFiles: [],
-        customQuestion: '',
+        // 切換到模擬卷生成時保留 customQuestion 和 practicalMaterials（供預填使用）
+        customQuestion: mode === 'exam-generator' ? state.customQuestion : '',
         practicalInfoPoints: [],
         practicalDevItems: {},
         practicalFormatRequirements: [],
         practicalCriteriaConfirmed: false,
-        practicalMaterials: '',
-      }),
+        practicalMaterials: mode === 'exam-generator' ? state.practicalMaterials : '',
+      })),
 
       setStep: (step) => set({ currentStep: step }),
       setSelectedQuestion: (question) => set({ selectedQuestion: question }),

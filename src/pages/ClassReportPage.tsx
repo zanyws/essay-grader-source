@@ -81,6 +81,8 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
     };
   }, [secondaryReports]);
 
+  const cleanText = (s: string) => s ? s.replace(/\*+/g, '').replace(/#{1,6}\s?/g, '').replace(/_{2,}/g, '').trim() : '';
+
   const generateAIAnalysis = async () => {
     if (!isAPIAvailable(apiKey)) {
       setError('請先設定 API 密鑰');
@@ -367,7 +369,7 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
                         <Icon className="w-5 h-5 text-[#4A6FA5]" />{title}
                       </h3>
                       <div className="p-4 bg-[#F7F9FB] rounded-lg whitespace-pre-wrap text-sm leading-relaxed">
-                        {analysis[key as keyof typeof analysis]}
+                        {cleanText(analysis[key as keyof typeof analysis] as string)}
                       </div>
                     </div>
                   ))}
@@ -384,7 +386,7 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
                 </div>
               ) : (
                 <div className="p-4 bg-[#F7F9FB] rounded-lg whitespace-pre-wrap text-sm leading-relaxed">
-                  {analysis.teachingSuggestion}
+                  {cleanText(analysis.teachingSuggestion)}
                 </div>
               )}
             </TabsContent>

@@ -16,7 +16,12 @@ import type { FileInfo } from '@/types';
 interface ExtendedFileInfo extends FileInfo { file?: File; }
 
 export function ExamGeneratorPage() {
-  const { apiKey, apiType, apiModel, apiBaseURL, generatedExam, setGeneratedExam, customQuestion: storedQuestion, practicalMaterials: storedMaterials } = useStore();
+  const {
+    apiKey, apiType, apiModel, apiBaseURL,
+    generatedExam, setGeneratedExam,
+    customQuestion: storedQuestion,
+    practicalMaterials: storedMaterials,
+  } = useStore();
   const [genre, setGenre] = useState('speech');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,12 +30,8 @@ export function ExamGeneratorPage() {
   // 若有從實用寫作批改頁帶來的題目資料，預設切換到貼上模式
   const [inputMode, setInputMode] = useState<'upload' | 'paste'>(storedQuestion ? 'paste' : 'upload');
   // 預填從實用寫作批改頁帶來的題目（含資料內容）
-  const prefilledContent = storedQuestion
-    ? storedMaterials
-      ? `${storedQuestion}\n\n${storedMaterials}`
-      : storedQuestion
-    : '';
-  const [pastedQuestion, setPastedQuestion] = useState(prefilledContent);
+  const [pastedQuestion, setPastedQuestion] = useState(storedQuestion || '');
+  const [pastedMaterials, setPastedMaterials] = useState(storedMaterials || '');
   const [pastedCriteria, setPastedCriteria] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -77,7 +78,11 @@ export function ExamGeneratorPage() {
         }
         fileType = uploadedFile.type;
       } else {
-        fileContent = `【題目】\n${pastedQuestion}\n\n【評分準則】\n${pastedCriteria || '（無特定評分準則）'}`;
+        fileContent = [
+          pastedQuestion ? `【題目】\n${pastedQuestion}` : '',
+          pastedMaterials ? `【資料內容（資料一及資料二）】\n${pastedMaterials}` : '',
+          pastedCriteria ? `【評分準則】\n${pastedCriteria}` : '',
+        ].filter(Boolean).join('\n\n') || '（無內容）';
         fileType = 'text/plain';
       }
       const result = await generatePracticalExamWithAPI(fileContent, fileType, genre, { apiKey, apiType: apiType as any, model: apiModel, baseURL: apiBaseURL });
@@ -204,6 +209,11 @@ export function ExamGeneratorPage() {
       ...getToneDescription(genre).map((t: string) => ` • ${t}`), '',
       '組織及格式要求（最高 10 分）：',
       ...formatReqs.map((r: string) => ` • ${r}`),
+      '',
+      '格式扣分規則（從組織分中扣減，最多扣2分）：',
+      ' • 格式不當或添加多餘格式，錯 1–2 項扣 1 分',
+      ' • 格式不當或添加多餘格式，錯 3 項或以上扣 2 分',
+      ' * 組織及格式部分不考慮字數',
     ];
     if (generatedExam.modelEssay) {
       lines.push('', '════════════════════════════════', '示範文章（底線部分為內容拓展示範）', '════════════════════════════════', '');
@@ -302,7 +312,14 @@ ${devPointsHtml}
 <p style="font-size:13px;color:#888;font-style:italic;margin-bottom:6px">以措詞行文為主，語氣須符合文體、對象及場合</p>
 <ul>${getToneDescription(genre).map((t: string) => `<li>${t}</li>`).join('\n ')}</ul>
 <h3>組織及格式（最高 10 分）</h3>
+<p class="score-note">必備格式元素（欠缺或添加多餘格式須扣分）：</p>
 <ul>${toList(formatReqs)}</ul>
+<div style="background:#fff8e6;border:1px solid #e8d9a0;border-radius:6px;padding:10px 14px;margin:8px 0;font-size:13px">
+  <p style="font-weight:600;margin:0 0 4px">格式扣分規則（從組織分中扣減，最多扣2分）：</p>
+  <p style="margin:2px 0">• 格式不當或添加多餘格式，錯 1–2 項扣 1 分</p>
+  <p style="margin:2px 0">• 格式不當或添加多餘格式，錯 3 項或以上扣 2 分</p>
+  <p style="margin:4px 0 0;color:#888;font-style:italic">* 組織及格式部分不考慮字數</p>
+</div>
 </div>
 ${modelEssayHtml ? `<div class="model-essay"><h2>示範文章</h2><p style="font-size:13px;color:#4a6fa5;margin-bottom:16px">藍色粗體部分為內容拓展示範，供學生參考。</p><div class="essay-body">${modelEssayHtml}</div></div>` : ''}
 </body></html>`;
@@ -402,8 +419,20 @@ h2{font-size:17px;margin-top:32px;margin-bottom:12px;border-bottom:2px solid #B5
                   <Textarea placeholder="請貼上題目內容..." value={pastedQuestion} onChange={(e) => setPastedQuestion(e.target.value)} className="min-h-[120px]" />
                 </div>
                 <div className="space-y-2">
+                  <Label className="flex items-center gap-2"><ClipboardList className="w-4 h-4" />貼上資料內容（可選）</Label>
+                  {storedMaterials && (
+                    <p className="text-xs text-[#4A6FA5] bg-blue-50 p-2 rounded">已自動填入實用寫作批改頁的資料內容</p>
+                  )}
+                  <Textarea
+                    placeholder="請貼上資料一及資料二的內容（可選）..."
+                    value={pastedMaterials}
+                    onChange={(e) => setPastedMaterials(e.target.value)}
+                    className="min-h-[100px]"
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label className="flex items-center gap-2"><ClipboardList className="w-4 h-4" />貼上評分準則（可選）</Label>
-                  <Textarea placeholder="請貼上評分準則內容（可選）..." value={pastedCriteria} onChange={(e) => setPastedCriteria(e.target.value)} className="min-h-[100px]" />
+                  <Textarea placeholder="請貼上評分準則內容（可選）..." value={pastedCriteria} onChange={(e) => setPastedCriteria(e.target.value)} className="min-h-[80px]" />
                 </div>
               </TabsContent>
             </Tabs>
@@ -428,7 +457,7 @@ h2{font-size:17px;margin-top:32px;margin-bottom:12px;border-bottom:2px solid #B5
               <p>AI將分析您上傳的模擬卷或貼上的題目內容，理解其主題和結構，然後生成一份全新的模擬卷。新模擬卷會保持相同的主題方向，但內容完全不同，並符合您選擇的文體格式要求。</p>
             </div>
 
-            <Button onClick={handleGenerate} disabled={isGenerating || (inputMode === 'upload' ? !uploadedFile : !pastedQuestion.trim())} className="w-full gap-2 bg-[#B5726E] hover:bg-[#a5625e]">
+            <Button onClick={handleGenerate} disabled={isGenerating || (inputMode === 'upload' ? !uploadedFile : (!pastedQuestion.trim() && !pastedMaterials.trim()))} className="w-full gap-2 bg-[#B5726E] hover:bg-[#a5625e]">
               {isGenerating ? <><RefreshCw className="w-4 h-4 animate-spin" />生成中...</> : <><Sparkles className="w-4 h-4" />生成模擬卷</>}
             </Button>
           </CardContent>
@@ -514,7 +543,14 @@ h2{font-size:17px;margin-top:32px;margin-bottom:12px;border-bottom:2px solid #B5
                   {getFormatRequirements().length > 0 && (
                     <div>
                       <p className="font-medium mb-2">組織及格式 <span className="text-xs text-[#718096] font-normal">（最高 10 分）</span></p>
-                      <ul className="text-sm list-disc list-inside space-y-1 text-[#718096]">{getFormatRequirements().map((r: string, idx: number) => <li key={idx}>{r}</li>)}</ul>
+                      <p className="text-xs text-[#718096] mb-1">必備格式元素（欠缺或添加多餘格式須扣分）：</p>
+                      <ul className="text-sm list-disc list-inside space-y-1 text-[#718096] mb-2">{getFormatRequirements().map((r: string, idx: number) => <li key={idx}>{r}</li>)}</ul>
+                      <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 space-y-0.5">
+                        <p className="font-medium">格式扣分規則（從組織分中扣減，最多扣2分）：</p>
+                        <p>• 格式不當或添加多餘格式，錯 1–2 項扣 1 分</p>
+                        <p>• 格式不當或添加多餘格式，錯 3 項或以上扣 2 分</p>
+                        <p className="text-[#718096] italic">* 組織及格式部分不考慮字數</p>
+                      </div>
                     </div>
                   )}
                   {getInfoPoints().length === 0 && getDevelopmentPoints().length === 0 && getFormatRequirements().length === 0 && (

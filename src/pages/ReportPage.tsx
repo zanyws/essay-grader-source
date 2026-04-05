@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, RefreshCw, FileText, User, Award, AlertTriangle, MessageSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, FileText, User, Award, AlertTriangle, MessageSquare, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useStore } from '@/hooks/useStore';
 import { GradingSlider } from '@/components/GradingSlider';
 import { ReportSection } from '@/components/ReportSection';
@@ -63,6 +64,8 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
     enhancementDirection,
     setCurrentWorkIndex,
     setStep,
+    resetForNextBatch,
+    secondaryReports: allReports,
   } = useStore();
 
   const [currentReport, setCurrentReport] = useState<SecondaryReport | null>(null);
@@ -448,6 +451,37 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
             <FileText className="w-4 h-4" />
             下載 HTML
           </Button>
+          {/* 最後一篇時顯示「完成本批，上傳下一批」 */}
+          {currentWorkIndex === studentWorks.length - 1 && allReports.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" className="gap-2 border-[#4A6FA5] text-[#4A6FA5]">
+                  <Layers className="w-4 h-4" />
+                  完成本批，上傳下一批
+                  <span className="text-xs bg-[#4A6FA5] text-white rounded-full px-1.5 py-0.5 ml-1">
+                    {allReports.length}篇
+                  </span>
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>上傳下一批作文</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    已批改 <strong>{allReports.length} 篇</strong>報告將會保留，清空學生作品列表後可上傳下一批繼續批改。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => { resetForNextBatch(); setStep(0); }}
+                    className="bg-[#4A6FA5] hover:bg-[#3a5f95]"
+                  >
+                    清空並上傳下一批
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           <Button onClick={handleNextWork} className="gap-2 bg-[#4A6FA5] hover:bg-[#3a5f95]">
             {currentWorkIndex < studentWorks.length - 1 ? '下一篇' : '全班報告'}
             <ChevronRight className="w-4 h-4" />

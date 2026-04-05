@@ -294,7 +294,8 @@ export const useStore = create<AppState>()(
         secondaryReports: state.secondaryReports,
         primaryReports: state.primaryReports,
         practicalReports: state.practicalReports,
-        studentWorks: state.studentWorks,
+        // studentWorks：過濾掉 File 物件（無法序列化到 localStorage）
+        studentWorks: state.studentWorks.map(w => ({ ...w })),
         currentWorkIndex: state.currentWorkIndex,
         currentStep: state.currentStep,
       }),

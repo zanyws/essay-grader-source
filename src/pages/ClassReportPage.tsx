@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   ChevronLeft, Download, RefreshCw, Users, FileText,
   TrendingUp, BookOpen, Lightbulb, PenTool, Loader2,
-  BarChart3, PenSquare
+  BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,8 +30,6 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
     apiKey,
     apiType,
     apiModel,
-    setAppMode,
-    setStep,
   } = useStore();
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -82,18 +80,6 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
       avgPunctuation: avgPunctuation.toFixed(1),
     };
   }, [secondaryReports]);
-
-  // 找出最弱維度（供生成模擬卷用）
-  const weakestDimension = useMemo(() => {
-    if (!stats) return '';
-    const dims = [
-      { name: '內容', score: parseFloat(stats.avgContent), max: 40 },
-      { name: '表達', score: parseFloat(stats.avgExpression), max: 30 },
-      { name: '結構', score: parseFloat(stats.avgStructure), max: 20 },
-    ];
-    const weakest = dims.reduce((a, b) => (a.score / a.max < b.score / b.max ? a : b));
-    return weakest.name;
-  }, [stats]);
 
   const generateAIAnalysis = async () => {
     if (!isAPIAvailable(apiKey)) {
@@ -189,12 +175,6 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
-
-  // 【生成模擬卷快捷入口】：跳到模擬卷生成頁並帶入弱點資訊
-  const handleGenerateExam = () => {
-    setAppMode('exam-generator');
-    setStep(0);
   };
 
   const handleExportClassReport = async () => {
@@ -412,34 +392,7 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
         </CardContent>
       </Card>
 
-      {/* 根據本班弱點生成模擬卷 */}
-      {stats && (
-        <Card className="mt-6 border-[#4A6FA5] bg-gradient-to-r from-blue-50 to-white">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <h3 className="font-semibold text-[#4A6FA5] flex items-center gap-2">
-                  <PenSquare className="w-5 h-5" />
-                  根據本班弱點生成實用寫作模擬卷
-                </h3>
-                <p className="text-sm text-[#718096] mt-1">
-                  本班最弱維度：<span className="font-medium text-[#B5726E]">{weakestDimension}</span>
-                  （平均{
-                    weakestDimension === '內容' ? stats.avgContent + '/40' :
-                    weakestDimension === '表達' ? stats.avgExpression + '/30' :
-                    stats.avgStructure + '/20'
-                  }）
-                  ——可生成針對性練習題讓同學加強
-                </p>
-              </div>
-              <Button onClick={handleGenerateExam} className="gap-2 bg-[#4A6FA5] hover:bg-[#3a5f95] whitespace-nowrap">
-                <PenSquare className="w-4 h-4" />
-                前往模擬卷生成
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+
 
       {error && (
         <Alert className="mt-4 bg-yellow-50 border-yellow-200">

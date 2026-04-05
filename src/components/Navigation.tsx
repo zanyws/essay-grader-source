@@ -157,16 +157,13 @@ export function Navigation() {
         </div>
 
         {/* 步驟導航（中間，只在有內容時顯示） */}
-        {(appMode === 'secondary' || appMode === 'primary') && (
+        {(appMode === 'secondary' || appMode === 'primary' || appMode === 'practical') && (
           <div className="hidden md:flex items-center gap-1">
-            {[
-              { step: 0, label: '設定' },
-              { step: 1, label: '校對' },
-              { step: 2, label: '批改' },
-              { step: 3, label: '全班' },
-            ].map(({ step, label }) => {
+            {(appMode === 'practical'
+              ? [{ step: 0, label: '設定' }, { step: 2, label: '批改' }, { step: 3, label: '全班' }]
+              : [{ step: 0, label: '設定' }, { step: 1, label: '校對' }, { step: 2, label: '批改' }, { step: 3, label: '全班' }]
+            ).map(({ step, label }) => {
               const isActive = currentStep === step;
-              // 判斷能否跳到此步驟
               const canGo =
                 step === 0 ? true :
                 step === 1 ? studentWorks.length > 0 :
@@ -180,9 +177,9 @@ export function Navigation() {
                   className={[
                     'px-3 py-1 rounded text-xs font-medium transition-colors',
                     isActive
-                      ? 'bg-[#4A6FA5] text-white'
+                      ? (appMode === 'practical' ? 'bg-[#B5726E] text-white' : 'bg-[#4A6FA5] text-white')
                       : canGo
-                      ? 'text-[#718096] hover:bg-[#F7F9FB] hover:text-[#4A6FA5]'
+                      ? (appMode === 'practical' ? 'text-[#718096] hover:bg-[#F7F9FB] hover:text-[#B5726E]' : 'text-[#718096] hover:bg-[#F7F9FB] hover:text-[#4A6FA5]')
                       : 'text-[#CBD5E0] cursor-not-allowed',
                   ].join(' ')}
                 >

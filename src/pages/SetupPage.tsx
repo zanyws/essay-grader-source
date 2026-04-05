@@ -25,12 +25,11 @@ export function SetupPage({ onNext }: SetupPageProps) {
     autoGrade, ignoreRedInk, contentPriority, enhancementDirection,
     customCriteria, uploadedFiles, studentWorks,
     apiKey, apiType, apiModel,
-    appMode, secondaryReports, primaryReports, practicalReports,
+    appMode, secondaryReports, primaryReports, practicalReports, addSecondaryReport,
     setSelectedQuestion, setCustomQuestion, setUseCustomQuestion,
     setAutoGrade, setIgnoreRedInk, setContentPriority, setEnhancementDirection,
     setCustomCriteria, addStudentWork, addUploadedFile, removeUploadedFile,
     clearUploadedFiles, setCurrentWorkIndex, setStep,
-    secondaryReports, addSecondaryReport,
   } = useStore();
 
   const [isProcessing, setIsProcessing] = useState(false);

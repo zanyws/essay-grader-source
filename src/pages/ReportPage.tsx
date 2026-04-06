@@ -91,13 +91,16 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
   useEffect(() => {
     if (!currentWork) return;
 
-    // 已有報告，直接顯示（去重：只取最新一份）
-    // 先按 id 精確匹配，再按姓名模糊匹配（用於匯入記錄後的情況）
+    // 已有報告，直接顯示（只取最新一份）
+    // 只用精確 id 匹配，避免 studentId 為空時的誤匹配問題
     let existingReports = secondaryReports.filter(r => r.studentWork.id === currentWork.id);
+    // 匯入記錄後的備用匹配：只在姓名非空且唯一時才用（防止同名學生誤匹配）
     if (existingReports.length === 0 && currentWork.name) {
-      existingReports = secondaryReports.filter(r =>
-        r.studentWork.name === currentWork.name || r.studentWork.studentId === currentWork.studentId
-      );
+      const nameMatches = secondaryReports.filter(r => r.studentWork.name === currentWork.name);
+      // 只有唯一匹配才使用，避免同名學生或空名誤匹配
+      if (nameMatches.length === 1) {
+        existingReports = nameMatches;
+      }
     }
     if (existingReports.length > 0) {
       const latestReport = existingReports[existingReports.length - 1];

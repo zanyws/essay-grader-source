@@ -36,6 +36,11 @@ app.get('/', (req, res) => {
 });
 
 // 測試 API 連接
+// 輕量 ping 端點（用於冷啟動偵測，不需要 API 密鑰）
+app.get('/api/ping', (req, res) => {
+  res.json({ ok: true, ts: Date.now() });
+});
+
 app.post('/api/test', async (req, res) => {
   try {
     const { apiKey, apiType, model, baseURL } = req.body;

@@ -28,7 +28,7 @@ export function SetupPage({ onNext }: SetupPageProps) {
     appMode, secondaryReports, primaryReports, practicalReports, addSecondaryReport,
     setSelectedQuestion, setCustomQuestion, setUseCustomQuestion,
     setAutoGrade, setIgnoreRedInk, setContentPriority, setEnhancementDirection,
-    setCustomCriteria, addStudentWork, addUploadedFile, removeUploadedFile,
+    setCustomCriteria, addStudentWork, updateStudentWork, addUploadedFile, removeUploadedFile,
     clearUploadedFiles, setCurrentWorkIndex, setStep,
   } = useStore();
 
@@ -187,6 +187,26 @@ export function SetupPage({ onNext }: SetupPageProps) {
       }
       clearUploadedFiles();
       setCurrentWorkIndex(0);
+
+      // 對沒有姓名或姓名重複的學生自動加入編號（避免批改時誤匹配）
+      // 讀取最新的 studentWorks，對「未命名」或重複名稱加上序號
+      const latestWorks = useStore.getState().studentWorks;
+      const nameCount: Record<string, number> = {};
+      const nameIndex: Record<string, number> = {};
+      // 統計每個名稱出現次數
+      for (const w of latestWorks) {
+        const n = w.name || '未命名';
+        nameCount[n] = (nameCount[n] || 0) + 1;
+      }
+      // 對重複名稱（或「未命名」）加上序號
+      for (const w of latestWorks) {
+        const n = w.name || '未命名';
+        if (nameCount[n] > 1 || n === '未命名') {
+          nameIndex[n] = (nameIndex[n] || 0) + 1;
+          updateStudentWork(w.id, { name: `${n}${nameIndex[n]}` });
+        }
+      }
+
       if (autoGrade) { setCurrentWorkIndex(0); setStep(2); } else { setStep(1); onNext(); }
     } catch (error: any) {
       setError(error.message || '處理過程中發生錯誤，請重試');

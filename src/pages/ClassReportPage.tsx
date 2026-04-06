@@ -12,6 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/hooks/useStore';
 import { exportClassReportToWord } from '@/lib/export';
 import { generateClassAnalysisWithAPI, isAPIAvailable } from '@/lib/api';
@@ -35,6 +40,16 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [analysis, setAnalysis] = useState<typeof emptyAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [downloadOptions, setDownloadOptions] = useState({
+    overallComment: true,
+    content: true,
+    expression: true,
+    structure: true,
+    punctuation: true,
+    enhancedText: true,
+    modelEssay: true,
+  });
 
   const question = useCustomQuestion ? customQuestion : selectedQuestion?.title || '';
 
@@ -132,13 +147,14 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
     URL.revokeObjectURL(url);
   };
 
-  // 【一鍵下載全部】：匯出所有學生報告為單一HTML
-  const handleDownloadAllHTML = () => {
+  // 【一鍵下載全部】：匯出所有學生報告為單一HTML（接受下載選項）
+  const handleDownloadAllHTML = (opts = downloadOptions) => {
     if (secondaryReports.length === 0) return;
 
     const sorted = [...secondaryReports].sort((a, b) => b.totalScore - a.totalScore);
     const reportCards = sorted.map(report => {
       const bld = (items: string[]) => items.map(s => `<li>${cleanText(s)}</li>`).join('');
+      const essayStyle = 'font-size:15px;line-height:2;white-space:pre-wrap;background:#f9f9fb;padding:16px;border-radius:6px;margin:8px 0';
       return `
       <div style="page-break-after:always;padding:30px;border-bottom:3px solid #4A6FA5;margin-bottom:30px">
         <h2 style="color:#4A6FA5;margin-top:0">${report.studentWork.name || '未命名'}${report.studentWork.studentId ? ` (${report.studentWork.studentId})` : ''}</h2>
@@ -149,19 +165,21 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
           <span><b>標點：</b>${report.grading.punctuation}/10</span>
           <span style="font-size:1.2em;font-weight:bold;color:#4A6FA5"><b>總分：</b>${report.totalScore}/100 ${report.gradeLabel || ''}</span>
         </div>
-        <h3 style="color:#555;margin-top:15px">總評</h3><p>${cleanText(report.overallComment)}</p>
-        <h3 style="color:#555">內容</h3>
+        ${opts.overallComment ? `<h3 style="color:#555;margin-top:15px">總評</h3><p>${cleanText(report.overallComment)}</p>` : ''}
+        ${opts.content ? `<h3 style="color:#555">內容</h3>
         <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.contentFeedback.strengths)}</ul></div>
-        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.contentFeedback.improvements)}</ul></div>
-        <h3 style="color:#555">表達</h3>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.contentFeedback.improvements)}</ul></div>` : ''}
+        ${opts.expression ? `<h3 style="color:#555">表達</h3>
         <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.expressionFeedback.strengths)}</ul></div>
-        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.expressionFeedback.improvements)}</ul></div>
-        <h3 style="color:#555">結構</h3>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.expressionFeedback.improvements)}</ul></div>` : ''}
+        ${opts.structure ? `<h3 style="color:#555">結構</h3>
         <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.structureFeedback.strengths)}</ul></div>
-        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.structureFeedback.improvements)}</ul></div>
-        ${report.punctuationFeedback ? `<h3 style="color:#555">標點</h3>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.structureFeedback.improvements)}</ul></div>` : ''}
+        ${opts.punctuation && report.punctuationFeedback ? `<h3 style="color:#555">標點</h3>
         <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.punctuationFeedback.strengths)}</ul></div>
         <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.punctuationFeedback.improvements)}</ul></div>` : ''}
+        ${opts.enhancedText && report.enhancedText ? `<h3 style="color:#555">增潤文章</h3><div style="${essayStyle}">${cleanText(report.enhancedText)}</div>` : ''}
+        ${opts.modelEssay && report.modelEssay ? `<h3 style="color:#555">示範文章</h3><div style="${essayStyle}">${cleanText(report.modelEssay)}</div>` : ''}
       </div>`;
     }).join('');
 
@@ -429,12 +447,60 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
             <FileText className="w-4 h-4" />
             下載報告HTML
           </Button>
-          <Button onClick={handleDownloadAllHTML} className="gap-2 bg-[#4A6FA5] hover:bg-[#3a5f95]">
+          <Button onClick={() => setShowDownloadDialog(true)} className="gap-2 bg-[#4A6FA5] hover:bg-[#3a5f95]">
             <Download className="w-4 h-4" />
             一鍵下載全部報告
           </Button>
         </div>
       </div>
+    {/* 下載選項 Dialog */}
+    <AlertDialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
+      <AlertDialogContent className="max-w-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>選擇下載內容</AlertDialogTitle>
+        </AlertDialogHeader>
+        <div className="space-y-3 py-2">
+          {([
+            { key: 'overallComment', label: '總評' },
+            { key: 'content',        label: '內容評語' },
+            { key: 'expression',     label: '表達評語' },
+            { key: 'structure',      label: '結構評語' },
+            { key: 'punctuation',    label: '標點評語' },
+            { key: 'enhancedText',   label: '增潤文章' },
+            { key: 'modelEssay',     label: '示範文章' },
+          ] as const).map(({ key, label }) => (
+            <div key={key} className="flex items-center gap-3">
+              <Checkbox
+                id={`dl-${key}`}
+                checked={downloadOptions[key]}
+                onCheckedChange={(checked) =>
+                  setDownloadOptions(prev => ({ ...prev, [key]: !!checked }))
+                }
+              />
+              <label htmlFor={`dl-${key}`} className="text-sm cursor-pointer select-none">{label}</label>
+            </div>
+          ))}
+          <div className="flex gap-3 pt-1 border-t">
+            <button className="text-xs text-[#4A6FA5] underline" onClick={() =>
+              setDownloadOptions({ overallComment: true, content: true, expression: true, structure: true, punctuation: true, enhancedText: true, modelEssay: true })
+            }>全選</button>
+            <button className="text-xs text-[#718096] underline" onClick={() =>
+              setDownloadOptions({ overallComment: false, content: false, expression: false, structure: false, punctuation: false, enhancedText: false, modelEssay: false })
+            }>全不選</button>
+          </div>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-[#4A6FA5] hover:bg-[#3a5f95]"
+            onClick={() => { setShowDownloadDialog(false); handleDownloadAllHTML(downloadOptions); }}
+          >
+            下載
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     </motion.div>
   );
 }

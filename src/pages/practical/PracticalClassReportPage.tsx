@@ -11,6 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useStore } from '@/hooks/useStore';
 import { generateClassAnalysisWithAPI, isAPIAvailable } from '@/lib/api';
 import { getPracticalGradeLabel } from '@/lib/gradingCriteria';
@@ -39,6 +44,16 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
   const [isGenerating, setIsGenerating] = useState(false);
   const [analysis, setAnalysis] = useState<typeof emptyAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [downloadOptions, setDownloadOptions] = useState({
+    overallComment: true,
+    info: true,
+    development: true,
+    tone: true,
+    organization: true,
+    enhancedText: true,
+    modelEssay: true,
+  });
 
   const question = customQuestion || '';
 
@@ -111,7 +126,7 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
   `;
 
   // 導出1：各學生個別批改報告
-  const handleDownloadAllStudentReports = () => {
+  const handleDownloadAllStudentReports = (opts = downloadOptions) => {
     if (practicalReports.length === 0) return;
     const sorted = [...practicalReports].sort((a, b) => b.totalScore - a.totalScore);
     const reportCards = sorted.map(report => {
@@ -122,6 +137,7 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
         ? `${r.grading.organization}（${orgBase}-${orgDeduction}）`
         : `${r.grading.organization}`;
       const buildList = (items: string[]) => items.map(s => `<li>${cleanText(s)}</li>`).join('');
+      const essayStyle = 'font-size:14px;line-height:2;white-space:pre-wrap;background:#f9f9fb;padding:14px;border-radius:6px;margin:8px 0';
       return `
       <div class="card">
         <h2>${r.studentWork.name || '未命名'}${r.studentWork.studentId ? ` (${r.studentWork.studentId})` : ''}</h2>
@@ -133,20 +149,22 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
           <div class="score-item"><b>行文語氣：</b>${r.grading.tone}/10</div>
           <div class="score-item"><b>組織：</b>${orgDisplay}/10</div>
         </div>
-        <h3>總評</h3><p>${cleanText(r.overallComment)}</p>
-        <h3>資訊（${r.grading.info}/2）</h3>
+        ${opts.overallComment ? `<h3>總評</h3><p>${cleanText(r.overallComment)}</p>` : ''}
+        ${opts.info ? `<h3>資訊（${r.grading.info}/2）</h3>
         <div class="strengths"><b>優點：</b><ul>${buildList(r.infoFeedback.strengths)}</ul></div>
-        <div class="improvements"><b>改善：</b><ul>${buildList(r.infoFeedback.improvements)}</ul></div>
-        <h3>內容發展（${r.grading.development}/8）</h3>
+        <div class="improvements"><b>改善：</b><ul>${buildList(r.infoFeedback.improvements)}</ul></div>` : ''}
+        ${opts.development ? `<h3>內容發展（${r.grading.development}/8）</h3>
         <div class="strengths"><b>優點：</b><ul>${buildList(r.developmentFeedback.strengths)}</ul></div>
-        <div class="improvements"><b>改善：</b><ul>${buildList(r.developmentFeedback.improvements)}</ul></div>
-        <h3>行文語氣（${r.grading.tone}/10）</h3>
+        <div class="improvements"><b>改善：</b><ul>${buildList(r.developmentFeedback.improvements)}</ul></div>` : ''}
+        ${opts.tone ? `<h3>行文語氣（${r.grading.tone}/10）</h3>
         <div class="strengths"><b>優點：</b><ul>${buildList(r.toneFeedback.strengths)}</ul></div>
-        <div class="improvements"><b>改善：</b><ul>${buildList(r.toneFeedback.improvements)}</ul></div>
-        <h3>組織（${orgDisplay}/10）</h3>
+        <div class="improvements"><b>改善：</b><ul>${buildList(r.toneFeedback.improvements)}</ul></div>` : ''}
+        ${opts.organization ? `<h3>組織（${orgDisplay}/10）</h3>
         <div class="strengths"><b>優點：</b><ul>${buildList(r.organizationFeedback.strengths)}</ul></div>
         <div class="improvements"><b>改善：</b><ul>${buildList(r.organizationFeedback.improvements)}</ul></div>
-        ${r.formatIssues?.length > 0 ? `<div style="background:#fff8e6;padding:12px;border-radius:6px;border-left:3px solid #E8A838;margin:8px 0"><b>格式問題：</b><ul>${r.formatIssues.map((i: string) => `<li>${cleanText(i)}</li>`).join('')}</ul></div>` : ''}
+        ${r.formatIssues?.length > 0 ? `<div style="background:#fff8e6;padding:12px;border-radius:6px;border-left:3px solid #E8A838;margin:8px 0"><b>格式問題：</b><ul>${r.formatIssues.map((i: string) => `<li>${cleanText(i)}</li>`).join('')}</ul></div>` : ''}` : ''}
+        ${opts.enhancedText && r.enhancedText ? `<h3>增潤文章</h3><div style="${essayStyle}">${cleanText(r.enhancedText)}</div>` : ''}
+        ${opts.modelEssay && r.modelEssay ? `<h3>示範文章</h3><div style="${essayStyle}">${cleanText(r.modelEssay)}</div>` : ''}
       </div>`;
     }).join('');
 
@@ -438,7 +456,7 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
           <Button variant="outline" onClick={handleDownloadCSV} className="gap-2">
             <Download className="w-4 h-4" />成績CSV
           </Button>
-          <Button variant="outline" onClick={handleDownloadAllStudentReports} className="gap-2">
+          <Button variant="outline" onClick={() => setShowDownloadDialog(true)} className="gap-2">
             <FileText className="w-4 h-4" />各學生報告HTML
           </Button>
           <Button variant="outline" onClick={handleDownloadClassSummary} className="gap-2">
@@ -449,6 +467,54 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
           </Button>
         </div>
       </div>
+    {/* 下載選項 Dialog */}
+    <AlertDialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
+      <AlertDialogContent className="max-w-sm">
+        <AlertDialogHeader>
+          <AlertDialogTitle>選擇下載內容</AlertDialogTitle>
+        </AlertDialogHeader>
+        <div className="space-y-3 py-2">
+          {([
+            { key: 'overallComment', label: '總評' },
+            { key: 'info',           label: '資訊評語' },
+            { key: 'development',    label: '內容發展評語' },
+            { key: 'tone',           label: '行文語氣評語' },
+            { key: 'organization',   label: '組織評語' },
+            { key: 'enhancedText',   label: '增潤文章' },
+            { key: 'modelEssay',     label: '示範文章' },
+          ] as const).map(({ key, label }) => (
+            <div key={key} className="flex items-center gap-3">
+              <Checkbox
+                id={`pdl-${key}`}
+                checked={downloadOptions[key]}
+                onCheckedChange={(checked) =>
+                  setDownloadOptions(prev => ({ ...prev, [key]: !!checked }))
+                }
+              />
+              <label htmlFor={`pdl-${key}`} className="text-sm cursor-pointer select-none">{label}</label>
+            </div>
+          ))}
+          <div className="flex gap-3 pt-1 border-t">
+            <button className="text-xs text-[#B5726E] underline" onClick={() =>
+              setDownloadOptions({ overallComment: true, info: true, development: true, tone: true, organization: true, enhancedText: true, modelEssay: true })
+            }>全選</button>
+            <button className="text-xs text-[#718096] underline" onClick={() =>
+              setDownloadOptions({ overallComment: false, info: false, development: false, tone: false, organization: false, enhancedText: false, modelEssay: false })
+            }>全不選</button>
+          </div>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-[#B5726E] hover:bg-[#a5625e]"
+            onClick={() => { setShowDownloadDialog(false); handleDownloadAllStudentReports(downloadOptions); }}
+          >
+            下載
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     </motion.div>
   );
 }

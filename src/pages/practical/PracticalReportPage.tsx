@@ -132,15 +132,17 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
 
   useEffect(() => {
     if (!currentWork) return;
+    // 精確 id 匹配，不做模糊匹配，避免空 studentId 誤匹配
     const existingReport = practicalReports.find(r => r.studentWork.id === currentWork.id);
     if (existingReport) { setCurrentReport(existingReport); setGradingChanged(false); return; }
     if (generatingForId.current === currentWork.id) return;
     generatingForId.current = currentWork.id;
-    generateReport();
+    // 傳入 work 作為參數，避免 async closure 中使用過時的 currentWork
+    generateReport(currentWork);
   }, [currentWorkIndex, currentWork?.id]);
 
-  const generateReport = async () => {
-    if (!currentWork) return;
+  const generateReport = async (work: typeof currentWork) => {
+    if (!work) return;
     setIsGenerating(true); setError(null); setGradingChanged(false); setCurrentReport(null);
     try {
       let newReport: PracticalReport;
@@ -148,16 +150,16 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
         try {
           const apiConfig: APIConfig = { apiKey, apiType: apiType as any, model: apiModel };
           const apiResult = await gradePracticalEssayWithAPI(
-            currentWork.correctedText, customQuestion, customCriteria, apiConfig,
+            work.correctedText, customQuestion, customCriteria, apiConfig,
             { genre: practicalGenre, infoPoints: practicalInfoPoints, devItems: practicalDevItems, formatRequirements: practicalFormatRequirements, materials: practicalMaterials }
           );
-          newReport = { ...apiResult, studentWork: currentWork };
+          newReport = { ...apiResult, studentWork: work };
         } catch (apiError: any) {
           setError(`API 批改失敗: ${apiError.message}`);
-          newReport = generateMockReport(currentWork);
+          newReport = generateMockReport(work);
         }
       } else {
-        newReport = generateMockReport(currentWork);
+        newReport = generateMockReport(work);
       }
       addPracticalReport(newReport);
       setCurrentReport(newReport);
@@ -345,7 +347,7 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
         <div className="text-center">
           <p className="text-[#718096]">無法生成報告</p>
           {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
-          <Button onClick={generateReport} className="mt-4 bg-[#B5726E]">重試</Button>
+          <Button onClick={() => generateReport(currentWork)} className="mt-4 bg-[#B5726E]">重試</Button>
         </div>
       </div>
     );
@@ -413,7 +415,7 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
                   }
                 </Button>
               )}
-              <Button onClick={() => { generatingForId.current = null; generateReport(); }} variant="outline" className="w-full gap-2">
+              <Button onClick={() => { generatingForId.current = null; generateReport(currentWork); }} variant="outline" className="w-full gap-2">
                 <RefreshCw className="w-4 h-4" />重新生成整份報告
               </Button>
             </CardContent>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Settings, BookOpen, Check, RotateCcw, AlertCircle,
   GraduationCap, FileText, PenTool, School, ChevronDown,
@@ -21,7 +21,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useStore } from '@/hooks/useStore';
-import { isAPIAvailable, GEMINI_CONFIG, OPENAI_CONFIG, testAPIConnection } from '@/lib/api';
+import { isAPIAvailable, GEMINI_CONFIG, OPENAI_CONFIG, testAPIConnection, checkBackendWaking } from '@/lib/api';
 import type { APIType } from '@/lib/api';
 import type { AppMode } from '@/types';
 
@@ -41,6 +41,17 @@ export function Navigation() {
     secondaryReports, primaryReports, practicalReports,
     studentWorks,
   } = useStore();
+
+  const [backendWaking, setBackendWaking] = useState(false);
+
+  useEffect(() => {
+    checkBackendWaking().then(({ isWaking }) => {
+      if (isWaking) {
+        setBackendWaking(true);
+        setTimeout(() => setBackendWaking(false), 60000);
+      }
+    });
+  }, []);
 
   const [localKey, setLocalKey] = useState(apiKey);
   const [localType, setLocalType] = useState<APIType>(apiType);
@@ -113,7 +124,14 @@ export function Navigation() {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-[#E2E8F0] z-50 shadow-sm">
+    <>
+      {backendWaking && (
+        <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-white text-center text-xs py-1.5 px-4 flex items-center justify-center gap-3">
+          <span>⏳ 後端服務器喚醒中，首次請求可能需要 30–60 秒，請稍候…</span>
+          <button onClick={() => setBackendWaking(false)} className="underline opacity-80 hover:opacity-100">關閉</button>
+        </div>
+      )}
+      <nav className={`fixed ${backendWaking ? 'top-6' : 'top-0'} left-0 right-0 h-16 bg-white border-b border-[#E2E8F0] z-50 shadow-sm`}>
       <div className="max-w-7xl mx-auto h-full px-4 flex items-center justify-between">
 
         {/* Logo & Mode Switcher */}
@@ -167,7 +185,7 @@ export function Navigation() {
               const canGo =
                 step === 0 ? true :
                 step === 1 ? studentWorks.length > 0 :
-                step === 2 ? studentWorks.length > 0 :
+                step === 2 ? studentWorks.length > 0 || accumulatedCount > 0 :
                 step === 3 ? accumulatedCount > 0 : false;
               return (
                 <button
@@ -350,5 +368,6 @@ export function Navigation() {
         </div>
       </div>
     </nav>
+    </>
   );
 }

@@ -78,6 +78,8 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
 
   // 用 ref 追蹤目前正在批改的 workId，避免 useEffect 重複觸發
   const generatingForId = useRef<string | null>(null);
+  // 清除AI回傳的Markdown符號
+  const clean = (s: string) => s ? s.replace(/\*+/g, '').replace(/#{1,6}\s?/g, '').replace(/_{2,}/g, '').trim() : '';
   // 用 ref 追蹤最新的 currentWorkIndex（避免 autoGrade 的 closure stale 問題）
   const currentWorkIndexRef = useRef(currentWorkIndex);
   currentWorkIndexRef.current = currentWorkIndex;
@@ -435,13 +437,25 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                     <>
                       <div>
                         <h3 className="text-lg font-semibold mb-3">總評</h3>
-                        <p className="text-[#2D3748] leading-relaxed">{currentReport.overallComment}</p>
+                        <p className="text-[#2D3748] leading-relaxed">{clean(currentReport.overallComment)}</p>
                       </div>
                       <Separator />
-                      <ReportSection title="內容" feedback={currentReport.contentFeedback} />
-                      <ReportSection title="表達" feedback={currentReport.expressionFeedback} />
-                      <ReportSection title="結構" feedback={currentReport.structureFeedback} />
-                      <ReportSection title="標點" feedback={currentReport.punctuationFeedback} />
+                      <ReportSection title="內容" feedback={{
+                        strengths: currentReport.contentFeedback.strengths.map(clean),
+                        improvements: currentReport.contentFeedback.improvements.map(clean),
+                      }} />
+                      <ReportSection title="表達" feedback={{
+                        strengths: currentReport.expressionFeedback.strengths.map(clean),
+                        improvements: currentReport.expressionFeedback.improvements.map(clean),
+                      }} />
+                      <ReportSection title="結構" feedback={{
+                        strengths: currentReport.structureFeedback.strengths.map(clean),
+                        improvements: currentReport.structureFeedback.improvements.map(clean),
+                      }} />
+                      <ReportSection title="標點" feedback={{
+                        strengths: currentReport.punctuationFeedback.strengths.map(clean),
+                        improvements: currentReport.punctuationFeedback.improvements.map(clean),
+                      }} />
                     </>
                   )}
                 </TabsContent>

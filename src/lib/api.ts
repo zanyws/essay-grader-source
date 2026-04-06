@@ -19,6 +19,21 @@ export function isAPIAvailable(apiKey: string): boolean {
   return !!apiKey && apiKey.length > 10;
 }
 
+// 後端喚醒偵測：發送 ping 並計時，超過3秒表示後端在冷啟動中
+export async function checkBackendWaking(): Promise<{ isWaking: boolean }> {
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    await fetch(`${BACKEND_URL}/api/ping`, { method: 'GET', signal: controller.signal });
+    clearTimeout(timeout);
+    return { isWaking: Date.now() - start > 3000 };
+  } catch {
+    // abort 或 fetch 失敗，可能是正在喚醒
+    return { isWaking: true };
+  }
+}
+
 // 測試 API 連接
 export async function testAPIConnection(config: APIConfig): Promise<{ success: boolean; message: string; model?: string }> {
   if (!isAPIAvailable(config.apiKey)) return { success: false, message: 'API 密鑰無效或為空' };

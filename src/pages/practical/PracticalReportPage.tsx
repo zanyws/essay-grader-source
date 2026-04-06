@@ -106,7 +106,7 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
     practicalFormatRequirements, practicalMaterials,
     apiKey, apiType, apiModel, practicalReports,
     addPracticalReport, updatePracticalReportGrading,
-    setCurrentWorkIndex, setStep, resetForNextBatch,
+    setCurrentWorkIndex, setStep, resetForNextBatch, autoGrade,
   } = useStore();
 
   const [currentReport, setCurrentReport] = useState<PracticalReport | null>(null);
@@ -114,6 +114,7 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
   const [isRegeneratingFeedback, setIsRegeneratingFeedback] = useState(false);
   const [gradingChanged, setGradingChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const clean = (s: string) => s ? s.replace(/\*+/g, '').replace(/#{1,6}\s?/g, '').replace(/_{2,}/g, '').trim() : '';
   const generatingForId = useRef<string | null>(null);
 
   const currentWork = studentWorks[currentWorkIndex];
@@ -496,7 +497,7 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
                     </div>
                   ) : (
                     <>
-                      <div><h3 className="font-semibold mb-2">總評</h3><p className="text-[#2D3748]">{currentReport.overallComment}</p></div>
+                      <div><h3 className="font-semibold mb-2">總評</h3><p className="text-[#2D3748]">{clean(currentReport.overallComment)}</p></div>
                       {currentReport.formatIssues.length > 0 && (
                         <div className="bg-orange-50 p-4 rounded-lg">
                           <h4 className="font-medium text-orange-700 mb-2">格式問題</h4>
@@ -512,8 +513,8 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
                         <div key={item.title} className="border-t pt-4">
                           <h4 className="font-medium mb-2">{item.title}</h4>
                           <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div><p className="text-green-600 mb-1">優點：</p><ul className="list-disc list-inside">{item.feedback.strengths.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
-                            <div><p className="text-orange-600 mb-1">改善：</p><ul className="list-disc list-inside">{item.feedback.improvements.map((s, i) => <li key={i}>{s}</li>)}</ul></div>
+                            <div><p className="text-green-600 mb-1">優點：</p><ul className="list-disc list-inside">{item.feedback.strengths.map((s, i) => <li key={i}>{clean(s)}</li>)}</ul></div>
+                            <div><p className="text-orange-600 mb-1">改善：</p><ul className="list-disc list-inside">{item.feedback.improvements.map((s, i) => <li key={i}>{clean(s)}</li>)}</ul></div>
                           </div>
                         </div>
                       ))}
@@ -537,9 +538,9 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
       {/* Bottom Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-[#E2E8F0] flex items-center justify-between px-6 z-40">
         <div className="flex items-center gap-2">
-          {/* 返回上傳文章 */}
-          <Button variant="outline" onClick={onPrev} className="gap-2">
-            <ChevronLeft className="w-4 h-4" />返回上傳文章
+          {/* 返回：autoGrade時直接回設定頁；否則回校對頁 */}
+          <Button variant="outline" onClick={() => autoGrade ? setStep(0) : onPrev()} className="gap-2">
+            <ChevronLeft className="w-4 h-4" />{autoGrade ? '返回設定頁' : '返回校對'}
           </Button>
           {currentWorkIndex > 0 && (
             <Button variant="outline" onClick={() => setCurrentWorkIndex(currentWorkIndex - 1)} className="gap-2">

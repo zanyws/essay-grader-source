@@ -136,35 +136,41 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
   const handleDownloadAllHTML = () => {
     if (secondaryReports.length === 0) return;
 
-    const reportCards = secondaryReports.map(report => `
-      <div class="report-card" style="page-break-after:always;padding:30px;border-bottom:3px solid #4A6FA5;margin-bottom:30px">
-        <h2 style="color:#4A6FA5">${report.studentWork.name || '未命名'} ${report.studentWork.studentId ? `(${report.studentWork.studentId})` : ''}</h2>
-        <div class="score-row" style="display:flex;gap:20px;margin:15px 0;flex-wrap:wrap">
+    const sorted = [...secondaryReports].sort((a, b) => b.totalScore - a.totalScore);
+    const reportCards = sorted.map(report => {
+      const bld = (items: string[]) => items.map(s => `<li>${cleanText(s)}</li>`).join('');
+      return `
+      <div style="page-break-after:always;padding:30px;border-bottom:3px solid #4A6FA5;margin-bottom:30px">
+        <h2 style="color:#4A6FA5;margin-top:0">${report.studentWork.name || '未命名'}${report.studentWork.studentId ? ` (${report.studentWork.studentId})` : ''}</h2>
+        <div style="display:flex;gap:20px;margin:15px 0;flex-wrap:wrap;background:#f0f5ff;padding:12px;border-radius:8px">
           <span><b>內容：</b>${report.grading.content * 4}/40</span>
           <span><b>表達：</b>${report.grading.expression * 3}/30</span>
           <span><b>結構：</b>${report.grading.structure * 2}/20</span>
           <span><b>標點：</b>${report.grading.punctuation}/10</span>
-          <span style="font-size:1.2em;font-weight:bold;color:#4A6FA5"><b>總分：</b>${report.totalScore}/100</span>
+          <span style="font-size:1.2em;font-weight:bold;color:#4A6FA5"><b>總分：</b>${report.totalScore}/100 ${report.gradeLabel || ''}</span>
         </div>
-        <h3>總評</h3><p>${report.overallComment}</p>
-        <h3>內容</h3>
-        <p><b>優點：</b>${report.contentFeedback.strengths.join('；')}</p>
-        <p><b>改善：</b>${report.contentFeedback.improvements.join('；')}</p>
-        <h3>表達</h3>
-        <p><b>優點：</b>${report.expressionFeedback.strengths.join('；')}</p>
-        <p><b>改善：</b>${report.expressionFeedback.improvements.join('；')}</p>
-        <h3>結構</h3>
-        <p><b>優點：</b>${report.structureFeedback.strengths.join('；')}</p>
-        <p><b>改善：</b>${report.structureFeedback.improvements.join('；')}</p>
-      </div>
-    `).join('');
+        <h3 style="color:#555;margin-top:15px">總評</h3><p>${cleanText(report.overallComment)}</p>
+        <h3 style="color:#555">內容</h3>
+        <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.contentFeedback.strengths)}</ul></div>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.contentFeedback.improvements)}</ul></div>
+        <h3 style="color:#555">表達</h3>
+        <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.expressionFeedback.strengths)}</ul></div>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.expressionFeedback.improvements)}</ul></div>
+        <h3 style="color:#555">結構</h3>
+        <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.structureFeedback.strengths)}</ul></div>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.structureFeedback.improvements)}</ul></div>
+        ${report.punctuationFeedback ? `<h3 style="color:#555">標點</h3>
+        <div style="background:#f0f7f0;padding:10px 14px;border-radius:6px;border-left:3px solid #5A9A7D;margin:6px 0"><b>優點：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.punctuationFeedback.strengths)}</ul></div>
+        <div style="background:#fff5f0;padding:10px 14px;border-radius:6px;border-left:3px solid #E89B5C;margin:6px 0"><b>改善：</b><ul style="margin:4px 0;padding-left:20px">${bld(report.punctuationFeedback.improvements)}</ul></div>` : ''}
+      </div>`;
+    }).join('');
 
     const html = `<!DOCTYPE html><html lang="zh-HK"><head><meta charset="UTF-8">
-      <title>全班批改報告</title>
-      <style>body{font-family:"Microsoft JhengHei","PingFang HK",sans-serif;max-width:900px;margin:0 auto;padding:20px;line-height:1.8}h2{margin-top:0}h3{color:#555;margin-top:15px}</style>
+      <title>各學生批改報告</title>
+      <style>body{font-family:"Microsoft JhengHei","PingFang HK",sans-serif;max-width:900px;margin:0 auto;padding:20px;line-height:1.8}h2{margin-top:0}</style>
     </head><body>
-      <h1 style="text-align:center;color:#4A6FA5">全班批改報告</h1>
-      <p style="text-align:center;color:#718096">題目：${question}</p>
+      <h1 style="text-align:center;color:#4A6FA5">各學生批改報告</h1>
+      <p style="text-align:center;color:#718096">題目：${question} ｜ 共 ${sorted.length} 人</p>
       ${reportCards}
     </body></html>`;
 
@@ -172,7 +178,7 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `全班批改報告_${new Date().toLocaleDateString('zh-HK')}.html`;
+    link.download = `各學生批改報告_${new Date().toLocaleDateString('zh-HK').replace(/\//g, '-')}.html`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

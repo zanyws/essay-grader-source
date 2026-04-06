@@ -186,10 +186,10 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
     const analysisHtml = analysis ? `
       <h2>整體分析</h2>
       ${[
-        ['格式分析', analysis.materialAnalysis],
+        ['內容資訊分析', analysis.materialAnalysis],
         ['內容發展分析', analysis.relevanceAnalysis],
         ['行文語氣分析', analysis.themeAnalysis],
-        ['整體表現', analysis.techniqueAnalysis],
+        ['組織結構分析', analysis.techniqueAnalysis],
       ].map(([title, content]) => content ? `<h3>${title}</h3><p style="line-height:1.9">${cleanText(content as string)}</p>` : '').join('')}
       ${analysis.teachingSuggestion ? `<h2>教學建議</h2><p style="line-height:1.9">${cleanText(analysis.teachingSuggestion)}</p>` : ''}
     ` : '<p style="color:#718096">（尚未生成AI分析，請在頁面上按「AI生成分析」後再導出）</p>';
@@ -383,10 +383,10 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
               ) : (
                 <>
                   {[
-                    { icon: BarChart3, title: '格式分析', key: 'materialAnalysis' },
+                    { icon: BarChart3, title: '內容資訊分析', key: 'materialAnalysis' },
                     { icon: TrendingUp, title: '內容發展分析', key: 'relevanceAnalysis' },
                     { icon: Users, title: '行文語氣分析', key: 'themeAnalysis' },
-                    { icon: FileText, title: '整體表現', key: 'techniqueAnalysis' },
+                    { icon: FileText, title: '組織結構分析', key: 'techniqueAnalysis' },
                   ].map(({ icon: Icon, title, key }) => (
                     <div key={key}>
                       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">

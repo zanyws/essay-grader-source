@@ -79,10 +79,10 @@ export function ExamGeneratorPage() {
         fileType = uploadedFile.type;
       } else {
         fileContent = [
-          pastedQuestion ? `【題目】\n${pastedQuestion}` : '',
-          pastedMaterials ? `【資料內容（資料一及資料二）】\n${pastedMaterials}` : '',
-          pastedCriteria ? `【評分準則】\n${pastedCriteria}` : '',
-        ].filter(Boolean).join('\n\n') || '（無內容）';
+          pastedQuestion ? `【參考卷：題目】\n${pastedQuestion}` : '',
+          pastedMaterials ? `【參考卷：資料內容（請分析資料一和資料二的結構）】\n${pastedMaterials}` : '',
+          pastedCriteria ? `【參考卷：評分準則（供參考）】\n${pastedCriteria}` : '',
+        ].filter(Boolean).join('\n\n---\n\n') || '（無內容）';
         fileType = 'text/plain';
       }
       const result = await generatePracticalExamWithAPI(fileContent, fileType, genre, { apiKey, apiType: apiType as any, model: apiModel, baseURL: apiBaseURL });

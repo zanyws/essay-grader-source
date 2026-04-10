@@ -35,7 +35,7 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     uploadedFiles, customCriteriaFiles, practicalCriteriaConfirmed,
     apiKey, apiType, apiModel,
     setCustomQuestion, setPracticalGenre, setAutoGrade, setIgnoreRedInk,
-    addStudentWork, addUploadedFile, removeUploadedFile, clearUploadedFiles,
+    addStudentWork, updateStudentWork, addUploadedFile, removeUploadedFile, clearUploadedFiles,
     addCustomCriteriaFile, removeCustomCriteriaFile, clearCustomCriteriaFiles,
     setPracticalInfoPoints, setPracticalDevItems, setPracticalFormatRequirements,
     setPracticalCriteriaConfirmed, setPracticalMaterials, resetPracticalCriteria,
@@ -90,10 +90,25 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
       if (!data.reports || !Array.isArray(data.reports)) { setError('無效的批改記錄文件'); return; }
       let imported = 0;
       for (const report of data.reports) {
-        if (report.studentWork && report.grading) { addPracticalReport(report); imported++; }
+        if (report.studentWork && report.grading) {
+          addPracticalReport(report);
+          // 同時重建 studentWork，讓校對和批改頁面能顯示原文
+          if (report.studentWork.originalText || report.studentWork.correctedText) {
+            addStudentWork({
+              id: report.studentWork.id,
+              name: report.studentWork.name || '未命名',
+              studentId: report.studentWork.studentId || '',
+              originalText: report.studentWork.originalText || report.studentWork.correctedText || '',
+              correctedText: report.studentWork.correctedText || report.studentWork.originalText || '',
+              fileName: report.studentWork.fileName,
+            });
+          }
+          imported++;
+        }
       }
-      setSuccess(`已成功匯入 ${imported} 篇批改記錄！`);
-      setTimeout(() => setSuccess(null), 4000);
+      setCurrentWorkIndex(0);
+      setSuccess(`已成功匯入 ${imported} 篇批改記錄！校對及批改頁面已可查看。`);
+      setTimeout(() => setSuccess(null), 5000);
       if (data.question) setCustomQuestion(data.question);
     } catch { setError('讀取文件失敗，請確認是有效的批改記錄JSON文件'); }
     if (importInputRef.current) importInputRef.current.value = '';
@@ -202,7 +217,11 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     };
     setLocalDevLabel(devDefaults[genre] || '相關細項');
     setLocalInfoPoints(['計劃名稱／活動名稱', '計劃目的／背景', '寫作身份／動機']);
-    resetPracticalCriteria();
+    // 只重置評分準則，不清空 practicalMaterials（材料內容在生成模擬卷時需要用到）
+    setPracticalInfoPoints([]);
+    setPracticalDevItems({});
+    setPracticalFormatRequirements([]);
+    setPracticalCriteriaConfirmed(false);
     setCriteriaReady(false);
   };
 
@@ -280,7 +299,24 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
       clearUploadedFiles();
       clearCustomCriteriaFiles();
       setCurrentWorkIndex(0);
-      if (autoGrade) { setStep(2); } else { setStep(1); onNext(); }
+
+      // 對沒有姓名或姓名重複的學生自動加入編號（避免批改時誤匹配）
+      const latestWorks = useStore.getState().studentWorks;
+      const nameCount: Record<string, number> = {};
+      const nameIndex: Record<string, number> = {};
+      for (const w of latestWorks) {
+        const n = w.name || '未命名';
+        nameCount[n] = (nameCount[n] || 0) + 1;
+      }
+      for (const w of latestWorks) {
+        const n = w.name || '未命名';
+        if (nameCount[n] > 1 || n === '未命名') {
+          nameIndex[n] = (nameIndex[n] || 0) + 1;
+          updateStudentWork(w.id, { name: `${n}${nameIndex[n]}` });
+        }
+      }
+
+      if (autoGrade) { setCurrentWorkIndex(0); setStep(2); } else { setStep(1); onNext(); }
     } catch (error: any) {
       setError(error.message || '處理過程中發生錯誤，請重試');
     } finally {

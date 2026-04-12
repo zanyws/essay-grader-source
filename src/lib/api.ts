@@ -150,7 +150,12 @@ export async function gradePracticalEssayWithAPI(
     const response = await fetch(`${BACKEND_URL}/api/grade`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey: config.apiKey, apiType: config.apiType, model: config.model, baseURL: config.baseURL, essayText, question, customCriteria, gradingMode: 'practical', genre: options.genre || '', infoPoints: options.infoPoints || [], devItems: options.devItems || {}, formatRequirements: options.formatRequirements || [], materials: options.materials || '' }) });
     const data = await response.json();
     if (!response.ok || !data.success) throw new Error(data.message || '批改失敗');
-    const grading = { info: Math.max(0, Math.min(2, Math.round(data.grading?.info || 1))), development: Math.max(0, Math.min(8, Math.round(data.grading?.development || 5))), tone: Math.max(0, Math.min(10, Math.round(data.grading?.tone || 6))), organization: Math.max(0, Math.min(10, Math.round(data.grading?.organization || 6))) };
+    const grading = {
+      info:         Math.max(0, Math.min(2,  Math.round(data.grading?.info         ?? 1))),
+      development:  Math.max(0, Math.min(8,  Math.round(data.grading?.development  ?? 5))),
+      tone:         Math.max(0, Math.min(10, Math.round(data.grading?.tone         ?? 6))),
+      organization: Math.max(0, Math.min(10, Math.round(data.grading?.organization ?? 6))),
+    };
     const contentScore = (grading.info + grading.development) * 3;
     const organizationScore = grading.tone + grading.organization;
     const totalScore = contentScore + organizationScore;

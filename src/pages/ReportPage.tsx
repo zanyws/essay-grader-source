@@ -10,8 +10,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useStore } from '@/hooks/useStore';
 import { GradingSlider } from '@/components/GradingSlider';
-import { ReportSection } from '@/components/ReportSection';
 import { ComparisonView } from '@/components/ComparisonView';
+import { EditableText, EditableList } from '@/components/EditableText';
 import type { SecondaryReport, SecondaryGrading } from '@/types';
 import {
   getGradeLabel,
@@ -440,25 +440,104 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                     <>
                       <div>
                         <h3 className="text-lg font-semibold mb-3">總評</h3>
-                        <p className="text-[#2D3748] leading-relaxed">{clean(currentReport.overallComment)}</p>
+                        <EditableText
+                          value={clean(currentReport.overallComment)}
+                          onSave={(v) => {
+                            const updated = { ...currentReport, overallComment: v };
+                            addSecondaryReport(updated);
+                            setCurrentReport(updated);
+                          }}
+                          className="text-[#2D3748]"
+                        />
                       </div>
                       <Separator />
-                      <ReportSection title="內容" feedback={{
-                        strengths: currentReport.contentFeedback.strengths.map(clean),
-                        improvements: currentReport.contentFeedback.improvements.map(clean),
-                      }} />
-                      <ReportSection title="表達" feedback={{
-                        strengths: currentReport.expressionFeedback.strengths.map(clean),
-                        improvements: currentReport.expressionFeedback.improvements.map(clean),
-                      }} />
-                      <ReportSection title="結構" feedback={{
-                        strengths: currentReport.structureFeedback.strengths.map(clean),
-                        improvements: currentReport.structureFeedback.improvements.map(clean),
-                      }} />
-                      <ReportSection title="標點" feedback={{
-                        strengths: currentReport.punctuationFeedback.strengths.map(clean),
-                        improvements: currentReport.punctuationFeedback.improvements.map(clean),
-                      }} />
+                      <div>
+                        <h4 className="font-medium mb-2 text-[#4A6FA5]">內容</h4>
+                        <p className="text-xs text-green-600 mb-1">優點：</p>
+                        <EditableList
+                          items={currentReport.contentFeedback.strengths.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, contentFeedback: { ...currentReport.contentFeedback, strengths: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-green-700 mb-2"
+                        />
+                        <p className="text-xs text-orange-600 mb-1">改善：</p>
+                        <EditableList
+                          items={currentReport.contentFeedback.improvements.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, contentFeedback: { ...currentReport.contentFeedback, improvements: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-orange-700"
+                        />
+                      </div>
+                      <Separator />
+                      <div>
+                        <h4 className="font-medium mb-2 text-[#4A6FA5]">表達</h4>
+                        <p className="text-xs text-green-600 mb-1">優點：</p>
+                        <EditableList
+                          items={currentReport.expressionFeedback.strengths.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, expressionFeedback: { ...currentReport.expressionFeedback, strengths: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-green-700 mb-2"
+                        />
+                        <p className="text-xs text-orange-600 mb-1">改善：</p>
+                        <EditableList
+                          items={currentReport.expressionFeedback.improvements.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, expressionFeedback: { ...currentReport.expressionFeedback, improvements: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-orange-700"
+                        />
+                      </div>
+                      <Separator />
+                      <div>
+                        <h4 className="font-medium mb-2 text-[#4A6FA5]">結構</h4>
+                        <p className="text-xs text-green-600 mb-1">優點：</p>
+                        <EditableList
+                          items={currentReport.structureFeedback.strengths.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, structureFeedback: { ...currentReport.structureFeedback, strengths: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-green-700 mb-2"
+                        />
+                        <p className="text-xs text-orange-600 mb-1">改善：</p>
+                        <EditableList
+                          items={currentReport.structureFeedback.improvements.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, structureFeedback: { ...currentReport.structureFeedback, improvements: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-orange-700"
+                        />
+                      </div>
+                      <Separator />
+                      <div>
+                        <h4 className="font-medium mb-2 text-[#4A6FA5]">標點</h4>
+                        <p className="text-xs text-green-600 mb-1">優點：</p>
+                        <EditableList
+                          items={currentReport.punctuationFeedback.strengths.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, punctuationFeedback: { ...currentReport.punctuationFeedback, strengths: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-green-700 mb-2"
+                        />
+                        <p className="text-xs text-orange-600 mb-1">改善：</p>
+                        <EditableList
+                          items={currentReport.punctuationFeedback.improvements.map(clean)}
+                          onSave={(items) => {
+                            const updated = { ...currentReport, punctuationFeedback: { ...currentReport.punctuationFeedback, improvements: items } };
+                            addSecondaryReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-orange-700"
+                        />
+                      </div>
                     </>
                   )}
                 </TabsContent>
@@ -469,11 +548,31 @@ export function ReportPage({ onNext, onPrev }: ReportPageProps) {
                     enhancedText={currentReport.enhancedText}
                     notes={currentReport.enhancementNotes}
                   />
+                  <div className="mt-4 border-t pt-4">
+                    <p className="text-xs text-[#718096] mb-2">直接編輯增潤文章：</p>
+                    <EditableText
+                      value={currentReport.enhancedText}
+                      onSave={(v) => {
+                        const updated = { ...currentReport, enhancedText: v };
+                        addSecondaryReport(updated); setCurrentReport(updated);
+                      }}
+                      className="text-sm text-[#2D3748] bg-[#F7F9FB] rounded-lg p-3"
+                      minHeight={120}
+                    />
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="model" className="mt-6">
                   <div className="p-4 bg-[#F7F9FB] rounded-lg">
-                    <p className="text-[#2D3748] whitespace-pre-wrap leading-relaxed">{currentReport.modelEssay}</p>
+                    <EditableText
+                      value={currentReport.modelEssay}
+                      onSave={(v) => {
+                        const updated = { ...currentReport, modelEssay: v };
+                        addSecondaryReport(updated); setCurrentReport(updated);
+                      }}
+                      className="text-[#2D3748]"
+                      minHeight={200}
+                    />
                   </div>
                 </TabsContent>
               </Tabs>

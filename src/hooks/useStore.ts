@@ -44,7 +44,7 @@ interface AppState {
   setAutoGrade: (auto: boolean) => void;
   setIgnoreRedInk: (ignore: boolean) => void;
   setContentPriority: (priority: boolean) => void;
-  setEnhancementDirection: (direction: 'auto' | 'narrative' | 'argumentative') => void;
+  setEnhancementDirection: (direction: 'auto' | 'narrative' | 'argumentative' | 'descriptive') => void;
   setPracticalGenre: (genre: string) => void;
   setPracticalInfoPoints: (points: string[]) => void;
   setPracticalDevItems: (items: PracticalDevItems) => void;
@@ -69,7 +69,12 @@ interface AppState {
   updateSecondaryReportGrading: (id: string, grading: SecondaryGrading) => void;
   updatePrimaryReportGrading: (id: string, grading: PrimaryGrading) => void;
   updatePracticalReportGrading: (id: string, grading: PracticalGrading) => void;
+  // 更新命題寫作報告的任意欄位（供行內編輯使用）
+  updateSecondaryReport: (id: string, updates: Partial<SecondaryReport>) => void;
+  // 更新實用寫作報告的任意欄位（供行內編輯使用）
+  updatePracticalReport: (id: string, updates: Partial<PracticalReport>) => void;
   setGeneratedExam: (exam: GeneratedExam | null) => void;
+  updateGeneratedExam: (updates: Partial<GeneratedExam>) => void;
   setApiKey: (key: string) => void;
   setApiType: (type: APIType) => void;
   setApiModel: (model: string) => void;
@@ -94,7 +99,7 @@ const initialState = {
   autoGrade: false,
   ignoreRedInk: false,
   contentPriority: false,
-  enhancementDirection: 'auto' as 'auto' | 'narrative' | 'argumentative',
+  enhancementDirection: 'auto' as 'auto' | 'narrative' | 'argumentative' | 'descriptive',
   practicalGenre: 'speech',
   practicalInfoPoints: [],
   practicalDevItems: {},
@@ -228,7 +233,20 @@ export const useStore = create<AppState>()(
         })
       })),
 
+      updateSecondaryReport: (id, updates) => set((state) => ({
+        secondaryReports: state.secondaryReports.map(r =>
+          r.studentWork.id === id ? { ...r, ...updates } : r
+        ),
+      })),
+      updatePracticalReport: (id, updates) => set((state) => ({
+        practicalReports: state.practicalReports.map(r =>
+          r.studentWork.id === id ? { ...r, ...updates } : r
+        ),
+      })),
       setGeneratedExam: (exam) => set({ generatedExam: exam }),
+      updateGeneratedExam: (updates) => set((state) => ({
+        generatedExam: state.generatedExam ? { ...state.generatedExam, ...updates } : null,
+      })),
       setApiKey: (key) => set({ apiKey: key }),
       setApiType: (type) => set({ apiType: type }),
       setApiModel: (model) => set({ apiModel: model }),

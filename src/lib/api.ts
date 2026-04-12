@@ -171,15 +171,19 @@ export async function extractQuestionCriteriaWithAPI(
   question: string;
   materials: string;
   criteria: string;
-  genre: string;  // 新增：AI 根據題目文件自動判斷的文體
+  infoPoints: string[];
+  genre: string;
 }> {
   if (!isAPIAvailable(config.apiKey)) throw new Error('API 密鑰無效，請在右上角設定正確的 API 密鑰');
   try {
     const isImage = fileType.startsWith('image/');
     const isPDF = fileType === 'application/pdf' || fileType.includes('pdf');
-    const useInlineData = isImage || isPDF;
+    const isWord = fileType.includes('word') || fileType.includes('doc') ||
+      fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      fileType === 'application/msword';
+    const useFileData = isImage || isPDF || isWord; // 二進制格式都用 fileData 傳送
     const requestBody: any = { apiKey: config.apiKey, apiType: config.apiType, model: config.model, baseURL: config.baseURL, fileType };
-    if (useInlineData) {
+    if (useFileData) {
       requestBody.fileData = fileContent.includes(',') ? fileContent.split(',')[1] : fileContent;
     } else {
       requestBody.text = fileContent;
@@ -190,8 +194,9 @@ export async function extractQuestionCriteriaWithAPI(
     return {
       question: data.question || '',
       materials: data.materials || '',
-      criteria: data.criteria || '',
-      genre: data.genre || '',  // 新增：後端 AI 判斷的文體
+      criteria: data.criteria || data.criteriaDigest || '', // 兼容舊格式
+      infoPoints: Array.isArray(data.infoPoints) ? data.infoPoints : [],
+      genre: data.genre || '',
     };
   } catch (error: any) {
     console.error('Extract question/criteria error:', error);
@@ -233,12 +238,29 @@ export async function generatePracticalExamWithAPI(fileContent: string, fileType
     const data = await response.json();
     if (!response.ok || !data.success) throw new Error(data.message || '生成失敗');
     const ms = data.markingScheme || {};
-    const toInfoPoints = (table: any[]): string[] => Array.isArray(table) ? table.map(r => `${r.item}：${r.description || r.requirement || ''}`) : [];
-    const toDevPoints = (table: any[]): string[] => Array.isArray(table) ? table.filter(r => r.item && r.item !== 'undefined' && r.description && r.description !== 'undefined').map(r => { const score = r.score && r.score !== 'undefined' ? `【${r.score}】` : ''; return `${score}${r.item}：${r.description}`; }) : [];
-    const toFormatPoints = (table: any[]): string[] => Array.isArray(table) ? table.filter(r => r.item && r.item !== 'undefined').map(r => `${r.item}：${r.requirement || r.description || ''}${r.score ? `（${r.score}）` : ''}`) : [];
+
+    // 後端 transformExamResult 已將資料轉為 string[]，直接使用
+    // 兼容舊格式（table[]）以防萬一
+    const toStrings = (val: any): string[] => {
+      if (Array.isArray(val) && val.length > 0) {
+        // 已是 string[]
+        if (typeof val[0] === 'string') return val.filter((s: string) => s && s !== 'undefined：' && s !== 'undefined：undefined');
+        // 仍是 table[]（舊格式兼容）
+        if (typeof val[0] === 'object') return val.filter((r: any) => r.item && r.item !== 'undefined').map((r: any) => r.description ? `${r.item}：${r.description}` : r.item);
+      }
+      return [];
+    };
+    const toFormatStrings = (val: any): string[] => {
+      if (Array.isArray(val) && val.length > 0) {
+        if (typeof val[0] === 'string') return val.filter((s: string) => s && s !== 'undefined：');
+        if (typeof val[0] === 'object') return val.filter((r: any) => r.item && r.item !== 'undefined').map((r: any) => `${r.item}：${r.requirement || r.description || ''}`);
+      }
+      return [];
+    };
+
     return {
       examPaper: { title: data.examPaper?.title || 'DSE 中文卷二甲部：實用寫作', time: '45分鐘', marks: '50分', instructions: Array.isArray(data.examPaper?.instructions) ? data.examPaper.instructions : [], question: data.examPaper?.question || '', material1: { title: data.examPaper?.material1?.title || '材料一', content: data.examPaper?.material1?.content || '' }, material2: { title: data.examPaper?.material2?.title || '材料二', content: data.examPaper?.material2?.content || '' } },
-      markingScheme: { content: { infoPoints: toInfoPoints(ms.contentInfo?.table || ms.content?.infoPoints || ms.infoPoints || []), developmentPoints: toDevPoints(ms.contentDevelopment?.table || ms.content?.developmentPoints || ms.developmentPoints || []) }, organization: { formatRequirements: toFormatPoints(ms.formatRequirements?.table || ms.organization?.formatRequirements || ms.formatRequirements || []), toneRequirements: toFormatPoints(ms.toneRequirements?.table || ms.organization?.toneRequirements || ms.toneRequirements || []) } },
+      markingScheme: { content: { infoPoints: toStrings(ms.content?.infoPoints), factualPoints: toStrings(ms.content?.factualPoints), developmentPoints: toStrings(ms.content?.developmentPoints) }, organization: { formatRequirements: toFormatStrings(ms.organization?.formatRequirements), toneRequirements: toFormatStrings(ms.organization?.toneRequirements) } },
       modelEssay: data.modelEssay || '',
     };
   } catch (error: any) {

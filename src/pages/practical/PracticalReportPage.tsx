@@ -12,6 +12,7 @@ import { gradePracticalEssayWithAPI, isAPIAvailable, BACKEND_URL } from '@/lib/a
 import type { APIConfig } from '@/types';
 import { getPracticalGradeLabel } from '@/lib/gradingCriteria';
 import type { PracticalReport, PracticalGrading } from '@/types';
+import { EditableText, EditableList } from '@/components/EditableText';
 
 interface PracticalReportPageProps {
   onNext: () => void;
@@ -63,41 +64,130 @@ function getFormatRules(genre: string): Array<{ label: string; deduction: string
   }
 }
 
-function parseEssayToHtml(text: string): string {
+
+/**
+ * 六種文體格式規則（穩定版）：
+ *  speech:     稱謂頂格 | 正文空兩格 | 無祝頌語 | 無署名 | 無日期
+ *  letter:     上款頂格 | 正文空兩格 | 祝頌語   | 署名兩行靠右 | 日期靠左
+ *  proposal:   上款頂格 | 標題置中   | 正文空兩格 | 無祝頌語 | 署名兩行靠右 | 日期靠左
+ *  report:     上款頂格 | 標題置中   | 正文空兩格 | 無祝頌語 | 署名兩行靠右 | 日期靠左
+ *  commentary: 上款頂格 | 正文空兩格 | 祝頌語   | 署名兩行靠右 | 日期靠左
+ *  article:    標題置中 | 正文空兩格 | 祝頌語   | 署名兩行靠右 | 日期靠左
+ */
+function parseEssayToHtml(text: string, genre: string = 'speech'): string {
   const processExpand = (t: string) =>
     t.replace(/【拓展】?/g, '<strong style="color:#2563eb;font-weight:700">')
      .replace(/【\/拓展】/g, '</strong>')
      .replace(/\[拓展\]/g, '<strong style="color:#2563eb;font-weight:700">')
      .replace(/\[\/拓展\]/g, '</strong>');
-  const SIGN_KEYWORDS = ['謹啟', '謹呈', '謹上', '敬啟', '敬呈', '拜啟'];
-  const ROLE_KEYWORDS = ['主席', '會長', '幹事', '大使', '委員', '代表', '老師', '負責人', '召集人', '社長'];
+
+  const SIGN_KEYWORDS = ['謹啟', '謹呈', '謹上', '敬啟', '敬呈', '拜啟', '頓首', '謹識'];
+  const ROLE_KEYWORDS = ['主席', '會長', '幹事', '大使', '委員', '代表', '老師', '負責人', '召集人', '社長', '學生', '組長', '部長', '隊長', '幹部'];
+
+  const cfg = {
+    hasGreeting:  ['speech', 'letter', 'proposal', 'report'].includes(genre),
+    hasTitle:     ['proposal', 'report', 'commentary', 'article'].includes(genre),
+    hasBlessing:  ['letter'].includes(genre),
+    hasSignName:  ['letter', 'proposal', 'report'].includes(genre),
+    hasAuthor:    ['commentary', 'article'].includes(genre),
+  };
+
   const lines = text.split('\n');
   const totalLines = lines.length;
-  const lastFewStart = Math.max(0, totalLines - 7);
-  const signNameIndexes = new Set<number>();
-  lines.forEach((line, idx) => {
-    if (idx >= lastFewStart && SIGN_KEYWORDS.some(k => line.trim().includes(k))) signNameIndexes.add(idx);
-  });
-  const noSignKeywords = signNameIndexes.size === 0;
+  const lastFewStart = Math.max(0, totalLines - 10);
+
+  // ── 預掃描：署名行 ──
+  const signLineIndexes = new Set<number>();
+  if (cfg.hasSignName) {
+    lines.forEach((line, idx) => {
+      if (idx >= lastFewStart && SIGN_KEYWORDS.some(k => line.trim().includes(k))) signLineIndexes.add(idx);
+    });
+  }
+
+  // ── 預掃描：身份行 ──
+  const signRoleIndexes = new Set<number>();
+  if (cfg.hasSignName) {
+    lines.forEach((line, idx) => {
+      if (idx < lastFewStart || signLineIndexes.has(idx)) return;
+      const t = line.trim();
+      if (!t) return;
+      const isShort = t.length > 0 && t.length < 25 && !/[。！？，、：]$/.test(t) && !t.includes('：');
+      const hasRoleKw = ROLE_KEYWORDS.some(k => t.includes(k));
+      if (
+        signLineIndexes.has(idx + 1) || signLineIndexes.has(idx + 2) ||
+        (hasRoleKw && isShort) ||
+        (isShort && signLineIndexes.size > 0 && idx >= totalLines - 6)
+      ) signRoleIndexes.add(idx);
+    });
+  }
+
+  // ── 預掃描：祝頌語 ──
+  const zhiLineIndexes = new Set<number>();
+  const blessLineIndexes = new Set<number>();
+  if (cfg.hasBlessing) {
+    lines.forEach((line, idx) => {
+      if (idx >= lastFewStart && line.trim() === '祝') {
+        zhiLineIndexes.add(idx);
+        for (let j = idx + 1; j < Math.min(idx + 3, totalLines); j++) {
+          if (lines[j].trim()) { blessLineIndexes.add(j); break; }
+        }
+      }
+    });
+  }
+
+  // ── 預掃描：評論/專題文章作者署名（無謹啟，短行靠右）──
+  const authorIndexes = new Set<number>();
+  if (cfg.hasAuthor) {
+    if (lines.length > 1) {
+      const t = lines[1].trim();
+      if (t && t.length < 25 && !/[。！？，、：]$/.test(t) && !t.includes('：')) authorIndexes.add(1);
+    }
+    lines.forEach((line, idx) => {
+      if (idx < totalLines - 6) return;
+      const t = line.trim();
+      if (t && t.length < 25 && !/[。！？，、：]$/.test(t) && !t.includes('：')) authorIndexes.add(idx);
+    });
+  }
+
   return lines.map((line, idx) => {
     const trimmed = line.trim();
-    if (!trimmed) return '<div style="margin:0.8em 0"></div>';
+    if (!trimmed) return '<div style="margin:0.7em 0"></div>';
     const processed = processExpand(trimmed);
     const isInLastSection = idx >= lastFewStart;
-    const isInFirstSection = idx < 8;
-    const TITLE_EXCLUDE = ['同學', '希望', '匯報', '上報', '計劃中', '提出', '相信', '認為'];
-    const isTitle = isInFirstSection && /建議|報告/.test(trimmed) && trimmed.length < 30 && !trimmed.includes('：') && !TITLE_EXCLUDE.some(w => trimmed.includes(w));
-    const isCommentaryTitle = idx === 0 && trimmed.length < 30 && !trimmed.includes('：') && !/[。！？]$/.test(trimmed);
-    const isSignName = signNameIndexes.has(idx);
-    const isSignRole = isInLastSection && !isSignName && (signNameIndexes.has(idx + 1) || (noSignKeywords && ROLE_KEYWORDS.some(k => trimmed.includes(k)) && trimmed.length < 15) || (noSignKeywords && idx >= totalLines - 3 && trimmed.length < 12 && !/[。！？，]$/.test(trimmed))) && !trimmed.includes('：');
-    const isDate = isInLastSection && /年.{0,5}月.{0,5}[日號]/.test(trimmed);
-    if (isTitle || isCommentaryTitle) return `<div style="text-align:center;font-weight:bold;margin:0.6em 0">${processed}</div>`;
-    if (isSignRole) return `<div style="text-align:right;padding-right:3em;margin:0.1em 0">${processed}</div>`;
-    if (isSignName) return `<div style="text-align:right;padding-right:0;margin:0.1em 0">${processed}</div>`;
-    if (isDate) return `<div style="text-align:left;margin:0.3em 0">${processed}</div>`;
-    return `<div style="margin:0.2em 0">${processed}</div>`;
+
+    // 上款／稱謂（commentary/article 無上款）
+    const isGreeting = cfg.hasGreeting && idx <= 2 &&
+      /[：:]/.test(trimmed) && trimmed.length < 30 && !trimmed.includes('。') && !trimmed.includes('，');
+
+    // 標題：置中粗體
+    const TITLE_EXCLUDE = ['同學', '希望', '匯報', '上報', '計劃', '提出', '相信', '認為', '先生', '女士', '老師'];
+    const titleMaxIdx = ['proposal', 'report'].includes(genre) ? 5 : genre === 'article' ? 1 : 2;
+    const isTitle = cfg.hasTitle && !isGreeting && idx < titleMaxIdx &&
+      trimmed.length < 40 && !trimmed.includes('：') && !trimmed.includes(':') &&
+      !/[。！？，]$/.test(trimmed) && !TITLE_EXCLUDE.some(w => trimmed.includes(w));
+
+    // 日期（書信/建議書/報告才有）
+    const isDate = cfg.hasSignName && isInLastSection &&
+      /[二零一九八七六五四三兩〇0-9]{4}年.*月.*[日號]/.test(trimmed);
+
+    const isZhi      = zhiLineIndexes.has(idx);
+    const isBlessing = blessLineIndexes.has(idx);
+    const isSignName = signLineIndexes.has(idx);
+    const isSignRole = signRoleIndexes.has(idx) && !isSignName && !isZhi && !isBlessing && !isDate;
+    const isAuthor   = cfg.hasAuthor && authorIndexes.has(idx) && !isTitle;
+
+    if (isGreeting)    return `<div style="margin:0.3em 0">${processed}</div>`;
+    if (isTitle)       return `<div style="text-align:center;font-weight:bold;margin:0.6em 0;display:block;width:100%">${processed}</div>`;
+    if (isDate)        return `<div style="margin:0.2em 0">${processed}</div>`;
+    if (isZhi)         return `<div style="margin:0.6em 0 0.1em 0">&emsp;&emsp;${processed}</div>`;
+    if (isBlessing)    return `<div style="margin:0.1em 0 0.5em 0">${processed}</div>`;
+    if (isSignName)    return `<div style="text-align:right;margin:0.1em 0">${processed}</div>`;
+    if (isSignRole)    return `<div style="text-align:right;padding-right:2em;margin:0.1em 0">${processed}</div>`;
+    if (isAuthor)      return `<div style="text-align:right;margin:0.2em 0">${processed}</div>`;
+    return `<div style="margin:0.2em 0">&emsp;&emsp;${processed}</div>`;
   }).join('');
 }
+
 
 export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps) {
   const {
@@ -273,17 +363,8 @@ export function PracticalReportPage({ onNext, onPrev }: PracticalReportPageProps
        <div class="improvements"><b>改善：</b><ul>${fb.improvements.map((s: string) => `<li>${cleanText(s)}</li>`).join('')}</ul></div>`
     ).join('');
 
-    // 增潤文章和示範文章（處理拓展標記）
-    const processExpand = (t: string) => t
-      .replace(/【拓展】?/g, '<strong style="color:#2563eb;font-weight:700">')
-      .replace(/【\/拓展】/g, '</strong>')
-      .replace(/\[拓展\]/g, '<strong style="color:#2563eb;font-weight:700">')
-      .replace(/\[\/拓展\]/g, '</strong>');
-    const essayToHtml = (text: string) => text.split('\n').map(line => {
-      const t = line.trim();
-      if (!t) return '<div style="margin:0.6em 0"></div>';
-      return `<div style="margin:0.2em 0">${processExpand(t)}</div>`;
-    }).join('');
+    // 增潤文章和示範文章（使用完整格式規則）
+    const essayToHtml = (text: string) => parseEssayToHtml(text, practicalGenre);
 
     const html = `<!DOCTYPE html>
 <html lang="zh-HK"><head><meta charset="UTF-8">
@@ -499,24 +580,54 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
                     </div>
                   ) : (
                     <>
-                      <div><h3 className="font-semibold mb-2">總評</h3><p className="text-[#2D3748]">{clean(currentReport.overallComment)}</p></div>
+                      <div>
+                        <h3 className="font-semibold mb-2">總評</h3>
+                        <EditableText
+                          value={clean(currentReport.overallComment)}
+                          onSave={(v) => {
+                            const updated = { ...currentReport, overallComment: v };
+                            addPracticalReport(updated); setCurrentReport(updated);
+                          }}
+                          className="text-[#2D3748]"
+                        />
+                      </div>
                       {currentReport.formatIssues.length > 0 && (
                         <div className="bg-orange-50 p-4 rounded-lg">
                           <h4 className="font-medium text-orange-700 mb-2">格式問題</h4>
                           <ul className="list-disc list-inside text-orange-700">{currentReport.formatIssues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>
                         </div>
                       )}
-                      {[
-                        { title: `資訊（${grading.info}/2）`, feedback: currentReport.infoFeedback },
-                        { title: `內容發展（${grading.development}/8）`, feedback: currentReport.developmentFeedback },
-                        { title: `行文語氣（${grading.tone}/10）`, feedback: currentReport.toneFeedback },
-                        { title: `組織（${orgDisplay}/10）`, feedback: currentReport.organizationFeedback },
-                      ].map((item) => (
+                      {([
+                        { key: 'infoFeedback', title: `資訊（${grading.info}/2）`, feedback: currentReport.infoFeedback },
+                        { key: 'developmentFeedback', title: `內容發展（${grading.development}/8）`, feedback: currentReport.developmentFeedback },
+                        { key: 'toneFeedback', title: `行文語氣（${grading.tone}/10）`, feedback: currentReport.toneFeedback },
+                        { key: 'organizationFeedback', title: `組織（${orgDisplay}/10）`, feedback: currentReport.organizationFeedback },
+                      ] as const).map((item) => (
                         <div key={item.title} className="border-t pt-4">
                           <h4 className="font-medium mb-2">{item.title}</h4>
                           <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div><p className="text-green-600 mb-1">優點：</p><ul className="list-disc list-inside">{item.feedback.strengths.map((s, i) => <li key={i}>{clean(s)}</li>)}</ul></div>
-                            <div><p className="text-orange-600 mb-1">改善：</p><ul className="list-disc list-inside">{item.feedback.improvements.map((s, i) => <li key={i}>{clean(s)}</li>)}</ul></div>
+                            <div>
+                              <p className="text-green-600 mb-1">優點：</p>
+                              <EditableList
+                                items={item.feedback.strengths.map(clean)}
+                                onSave={(items) => {
+                                  const updated = { ...currentReport, [item.key]: { ...item.feedback, strengths: items } };
+                                  addPracticalReport(updated); setCurrentReport(updated);
+                                }}
+                                className="text-green-700"
+                              />
+                            </div>
+                            <div>
+                              <p className="text-orange-600 mb-1">改善：</p>
+                              <EditableList
+                                items={item.feedback.improvements.map(clean)}
+                                onSave={(items) => {
+                                  const updated = { ...currentReport, [item.key]: { ...item.feedback, improvements: items } };
+                                  addPracticalReport(updated); setCurrentReport(updated);
+                                }}
+                                className="text-orange-700"
+                              />
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -525,11 +636,35 @@ ${currentReport.formatIssues.length > 0 ? `<div style="background:#fff8e6;paddin
                 </TabsContent>
                 <TabsContent value="enhanced" className="mt-4">
                   <p className="text-xs text-[#718096] mb-2">藍色粗體部分為內容拓展示範。</p>
-                  <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-8" dangerouslySetInnerHTML={{ __html: parseEssayToHtml(currentReport.enhancedText) }} />
+                  <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-8" style={{textAlign:"left"}} dangerouslySetInnerHTML={{ __html: parseEssayToHtml(currentReport.enhancedText, practicalGenre) }} />
+                  <div className="mt-4 border-t pt-4">
+                    <p className="text-xs text-[#718096] mb-2">直接編輯增潤文章：</p>
+                    <EditableText
+                      value={currentReport.enhancedText}
+                      onSave={(v) => {
+                        const updated = { ...currentReport, enhancedText: v };
+                        addPracticalReport(updated); setCurrentReport(updated);
+                      }}
+                      className="text-sm text-[#2D3748] bg-[#F7F9FB] rounded-lg p-3"
+                      minHeight={120}
+                    />
+                  </div>
                 </TabsContent>
                 <TabsContent value="model" className="mt-4">
                   <p className="text-xs text-[#718096] mb-2">藍色粗體部分為內容拓展示範。</p>
-                  <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-8" dangerouslySetInnerHTML={{ __html: parseEssayToHtml(currentReport.modelEssay) }} />
+                  <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-8" style={{textAlign:"left"}} dangerouslySetInnerHTML={{ __html: parseEssayToHtml(currentReport.modelEssay, practicalGenre) }} />
+                  <div className="mt-4 border-t pt-4">
+                    <p className="text-xs text-[#718096] mb-2">直接編輯示範文章：</p>
+                    <EditableText
+                      value={currentReport.modelEssay}
+                      onSave={(v) => {
+                        const updated = { ...currentReport, modelEssay: v };
+                        addPracticalReport(updated); setCurrentReport(updated);
+                      }}
+                      className="text-sm text-[#2D3748] bg-[#F7F9FB] rounded-lg p-3"
+                      minHeight={200}
+                    />
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>

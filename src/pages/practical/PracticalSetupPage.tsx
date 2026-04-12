@@ -144,13 +144,21 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     try {
       addCustomCriteriaFile({ id: generateId(), name: file.name, size: file.size, type: file.type || 'application/octet-stream', file } as ExtendedFileInfo);
       let fileContent: string;
+      let fileType = file.type || 'application/octet-stream';
+      const isWord = file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.doc') ||
+        file.type === 'application/msword' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       if (file.type.startsWith('image/') || file.type.includes('pdf')) {
         fileContent = await readFileAsDataURL(file);
+      } else if (isWord) {
+        // Word 文件以 base64 傳送，後端用 mammoth 提取
+        fileContent = await readFileAsDataURL(file);
+        fileType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
       } else {
         fileContent = await readFileAsText(file);
       }
       const apiConfig: APIConfig = { apiKey, apiType: apiType as any, model: apiModel };
-      const result = await extractQuestionCriteriaWithAPI(fileContent, file.type, apiConfig);
+      const result = await extractQuestionCriteriaWithAPI(fileContent, fileType, apiConfig);
       if (result.question) setCustomQuestion(result.question);
       if (result.materials) { setPracticalMaterials(result.materials); setExtractedMaterials(result.materials); }
       if (result.criteria) setExtractedCriteria(result.criteria);
@@ -163,8 +171,8 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
         setAiDetectedGenre(result.genre); // 記錄AI判斷，但不覆蓋用戶選擇
       }
 
-      // 初始化評分準則
-      initCriteriaDefaults(result.genre || practicalGenre);
+      // 初始化評分準則（直接使用 AI 提取的資訊分項目）
+      initCriteriaDefaults(result.genre || practicalGenre, result.infoPoints);
       setSuccess(`已成功提取題目${result.genre ? `，AI 判斷文體為「${GENRE_LABELS[result.genre] || result.genre}」` : ''}，請在下方確認評分準則`);
       setTimeout(() => setSuccess(null), 5000);
     } catch (e: any) {
@@ -186,17 +194,17 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
       const apiConfig: APIConfig = { apiKey, apiType: apiType as any, model: apiModel };
       const result = hasPastedContent
         ? await extractQuestionCriteriaWithAPI(pastedContent, 'text/plain', apiConfig)
-        : { question: customQuestion, materials: '', criteria: extractedCriteria, genre: '' };
+        : { question: customQuestion, materials: '', criteria: extractedCriteria, infoPoints: [] as string[], genre: '' };
       if (result.question) setCustomQuestion(result.question);
       if (result.materials) { setPracticalMaterials(result.materials); setExtractedMaterials(result.materials); }
-      if (result.criteria) setExtractedCriteria(result.criteria);
+      if ('criteria' in result && result.criteria) setExtractedCriteria(result.criteria);
       if (result.genre && !genreManuallyChanged) {
         setPracticalGenre(result.genre);
         setAiDetectedGenre(result.genre);
       } else if (result.genre) {
         setAiDetectedGenre(result.genre);
       }
-      initCriteriaDefaults(result.genre || practicalGenre);
+      initCriteriaDefaults(result.genre || practicalGenre, result.infoPoints);
       setSuccess(`AI 已整理內容${result.genre ? `，判斷文體為「${GENRE_LABELS[result.genre] || result.genre}」` : ''}，請在下方確認評分準則`);
       setTimeout(() => setSuccess(null), 5000);
     } catch (e: any) {
@@ -206,7 +214,7 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
     }
   };
 
-  const initCriteriaDefaults = (genre: string) => {
+  const initCriteriaDefaults = (genre: string, extractedInfoPoints?: string[]) => {
     const devDefaults: Record<string, string> = {
       speech: '2項措施、4個措施細項、3項同學意見',
       letter: '2項個人條件、4個條件細項、3項同學意見',
@@ -216,8 +224,14 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
       article: '2個目標、4項活動細項、4項意見',
     };
     setLocalDevLabel(devDefaults[genre] || '相關細項');
-    setLocalInfoPoints(['計劃名稱／活動名稱', '計劃目的／背景', '寫作身份／動機']);
-    // 只重置評分準則，不清空 practicalMaterials（材料內容在生成模擬卷時需要用到）
+
+    // 優先使用 AI 提取的資訊分項目，若無則用預設值
+    if (extractedInfoPoints && extractedInfoPoints.length > 0) {
+      setLocalInfoPoints(extractedInfoPoints);
+    } else {
+      setLocalInfoPoints(['計劃名稱／活動名稱', '計劃目的／背景', '寫作身份／動機']);
+    }
+
     setPracticalInfoPoints([]);
     setPracticalDevItems({});
     setPracticalFormatRequirements([]);
@@ -519,6 +533,13 @@ export function PracticalSetupPage({ onNext }: PracticalSetupPageProps) {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">資訊分考核項目 <span className="ml-1 text-xs text-[#718096] font-normal">（全部提及得2分，欠1項得1分）</span></Label>
+                  {localInfoPoints.length > 0 && !practicalCriteriaConfirmed && (
+                    <p className="text-xs text-[#4A6FA5] bg-blue-50 px-2 py-1 rounded">
+                      {customCriteriaFiles.length > 0 || pastedContent
+                        ? 'AI 已從評分準則提取以下項目，請確認或修改'
+                        : '以下為預設項目，請根據題目修改'}
+                    </p>
+                  )}
                   <div className="space-y-1">
                     {localInfoPoints.map((point, idx) => (
                       <div key={idx} className="flex items-center gap-2 p-2 bg-[#F7F9FB] rounded-lg">

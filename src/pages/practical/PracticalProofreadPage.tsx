@@ -42,6 +42,7 @@ export function PracticalProofreadPage({ onNext, onPrev }: PracticalProofreadPag
     if (currentWorkIndex < studentWorks.length - 1) {
       setCurrentWorkIndex(currentWorkIndex + 1);
     } else {
+      setCurrentWorkIndex(0); // 重設到第1篇，確保批改從頭開始
       onNext();
     }
   };

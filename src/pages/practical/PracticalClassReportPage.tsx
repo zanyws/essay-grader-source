@@ -20,6 +20,7 @@ import { useStore } from '@/hooks/useStore';
 import { generateClassAnalysisWithAPI, isAPIAvailable } from '@/lib/api';
 import { getPracticalGradeLabel } from '@/lib/gradingCriteria';
 import type { APIConfig } from '@/types';
+import { EditableText } from '@/components/EditableText';
 
 interface PracticalClassReportPageProps {
   onPrev: () => void;
@@ -411,7 +412,11 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
                         <Icon className="w-5 h-5 text-[#B5726E]" />{title}
                       </h3>
                       <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-relaxed">
-                        {analysis[key as keyof typeof analysis]}
+                        <EditableText
+                          value={cleanText(analysis[key as keyof typeof analysis] as string)}
+                          onSave={(v) => setAnalysis({ ...analysis!, [key]: v })}
+                          minHeight={80}
+                        />
                       </div>
                     </div>
                   ))}
@@ -427,7 +432,11 @@ export function PracticalClassReportPage({ onPrev }: PracticalClassReportPagePro
                 </div>
               ) : (
                 <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-relaxed">
-                  {analysis.teachingSuggestion}
+                  <EditableText
+                    value={cleanText(analysis.teachingSuggestion)}
+                    onSave={(v) => setAnalysis({ ...analysis!, teachingSuggestion: v })}
+                    minHeight={120}
+                  />
                 </div>
               )}
             </TabsContent>

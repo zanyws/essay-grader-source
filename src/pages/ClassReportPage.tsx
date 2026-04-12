@@ -21,6 +21,7 @@ import { useStore } from '@/hooks/useStore';
 import { exportClassReportToWord } from '@/lib/export';
 import { generateClassAnalysisWithAPI, isAPIAvailable } from '@/lib/api';
 import type { APIConfig } from '@/types';
+import { EditableText } from '@/components/EditableText';
 
 interface ClassReportPageProps {
   onPrev: () => void;
@@ -392,8 +393,12 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
                       <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                         <Icon className="w-5 h-5 text-[#4A6FA5]" />{title}
                       </h3>
-                      <div className="p-4 bg-[#F7F9FB] rounded-lg whitespace-pre-wrap text-sm leading-relaxed">
-                        {cleanText(analysis[key as keyof typeof analysis] as string)}
+                      <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-relaxed">
+                        <EditableText
+                          value={cleanText(analysis[key as keyof typeof analysis] as string)}
+                          onSave={(v) => setAnalysis({ ...analysis!, [key]: v })}
+                          minHeight={80}
+                        />
                       </div>
                     </div>
                   ))}
@@ -409,8 +414,12 @@ export function ClassReportPage({ onPrev }: ClassReportPageProps) {
                   <p className="mb-4">先在「整體分析」Tab 生成 AI 分析</p>
                 </div>
               ) : (
-                <div className="p-4 bg-[#F7F9FB] rounded-lg whitespace-pre-wrap text-sm leading-relaxed">
-                  {cleanText(analysis.teachingSuggestion)}
+                <div className="p-4 bg-[#F7F9FB] rounded-lg text-sm leading-relaxed">
+                  <EditableText
+                    value={cleanText(analysis.teachingSuggestion)}
+                    onSave={(v) => setAnalysis({ ...analysis!, teachingSuggestion: v })}
+                    minHeight={120}
+                  />
                 </div>
               )}
             </TabsContent>
